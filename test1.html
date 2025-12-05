@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Core V10 - Custom & Save</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        canvas { display: block; }
+
+        /* --- UI UTILS --- */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent; margin: 8px 0;
+        }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 14px; width: 14px; border-radius: 50%; background: #00ffff; cursor: pointer;
+            -webkit-appearance: none; margin-top: -5px; box-shadow: 0 0 10px #00ffff;
+        }
+
+        /* --- LAYOUT --- */
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.96);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100; transition: opacity 0.5s ease;
+        }
+        
+        .cyber-btn {
+            background: transparent; color: #00ffff; border: 1px solid #00ffff;
+            padding: 15px 40px; font-size: 18px; letter-spacing: 4px; cursor: pointer;
+            text-transform: uppercase; transition: 0.3s;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+        .cyber-btn:hover { background: rgba(0, 255, 255, 0.1); box-shadow: 0 0 30px rgba(0, 255, 255, 0.6); color: white; border-color: white;}
+
+        #hud {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 500px;
+            pointer-events: none; opacity: 0; transition: opacity 1s;
+            z-index: 10;
+        }
+        #hud.active { opacity: 1; pointer-events: auto; }
+
+        /* Main Panel */
+        .hud-panel {
+            background: rgba(5, 5, 5, 0.85); border: 1px solid rgba(0, 255, 255, 0.15);
+            backdrop-filter: blur(12px); padding: 20px; border-radius: 8px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        /* Top Bar */
+        .track-header { display: flex; justify-content: space-between; align-items: flex-end; }
+        .track-title { color: #fff; font-size: 14px; letter-spacing: 2px; font-weight: bold; }
+        .track-time { color: #666; font-size: 12px; }
+
+        /* Progress */
+        .progress-container {
+            width: 100%; height: 6px; background: rgba(255,255,255,0.05);
+            cursor: pointer; position: relative; border-radius: 3px; overflow: hidden; margin: 5px 0;
+        }
+        .progress-bar {
+            height: 100%; width: 0%; background: #00ffff;
+            box-shadow: 0 0 10px #00ffff; transition: width 0.05s linear;
+        }
+
+        /* Controls */
+        .controls-row { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
+        
+        .play-btn {
+            width: 36px; height: 36px; border-radius: 50%; border: 1px solid #00ffff;
+            background: transparent; color: #00ffff; cursor: pointer; display: flex; justify-content: center; align-items: center;
+            font-size: 16px; transition: 0.2s;
+        }
+        .play-btn:hover { background: rgba(0,255,255,0.2); box-shadow: 0 0 15px rgba(0,255,255,0.4); }
+
+        .mode-control { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; }
+        .mode-btn { background: none; border: none; color: #888; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .mode-btn:hover { color: #fff; }
+        #mode-display { color: #00ffff; font-size: 11px; width: 80px; text-align: center; font-weight: bold; }
+
+        /* Settings Toggle */
+        #settings-toggle {
+            background: none; border: 1px solid #444; color: #888; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 10px; letter-spacing: 1px;
+        }
+        #settings-toggle:hover { border-color: #fff; color: #fff; }
+
+        /* Advanced Settings Panel */
+        #settings-panel {
+            display: none; flex-direction: column; gap: 10px; margin-top: 10px; 
+            padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        #settings-panel.open { display: flex; }
+
+        .setting-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #aaa; }
+        .setting-label { min-width: 80px; }
+        .setting-val { width: 30px; text-align: right; color: #00ffff; }
+        .setting-slider { flex-grow: 1; margin: 0 10px; }
+
+        .save-row { display: flex; justify-content: space-between; margin-top: 10px; }
+        .action-btn { 
+            background: rgba(0,255,255,0.1); border: 1px solid #00ffff; color: #00ffff; 
+            padding: 5px 15px; cursor: pointer; font-size: 10px; 
+        }
+        .action-btn:hover { background: #00ffff; color: #000; }
+        #toast { 
+            position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+            background: #00ffff; color: #000; padding: 5px 10px; border-radius: 4px;
+            font-size: 10px; opacity: 0; transition: opacity 0.5s; pointer-events: none;
+        }
+
+        /* Error Modal */
+        .modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #111; border: 1px solid #ff0055; padding: 30px; z-index: 200;
+            color: white; text-align: center; display: none;
+            box-shadow: 0 0 50px rgba(255, 0, 85, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="color:white; font-size:12px; letter-spacing:6px; margin-bottom:40px; opacity:0.6;">SYSTEM V10 // CUSTOM CORE</h1>
+        <button id="start-btn" class="cyber-btn">INITIALIZE</button>
+    </div>
+
+    <div id="hud">
+        <div id="toast">SETTINGS SAVED</div>
+        <div class="hud-panel">
+            <div class="track-header">
+                <div class="track-title">ROCK ID 19</div>
+                <div class="track-time" id="time-display">0:00 / 0:00</div>
+            </div>
+
+            <div class="progress-container" id="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+
+            <div class="controls-row">
+                <button class="play-btn" id="play-btn">▶</button>
+                
+                <div class="mode-control">
+                    <button class="mode-btn" id="prev-mode">&lt;</button>
+                    <span id="mode-display">SPIKES</span>
+                    <button class="mode-btn" id="next-mode">&gt;</button>
+                </div>
+
+                <button id="settings-toggle">PARAMS ▼</button>
+                <button id="upload-btn" class="action-btn" style="border-radius:4px;">UPLOAD</button>
+            </div>
+
+            <!-- Settings Panel -->
+            <div id="settings-panel">
+                <!-- Bass Gain -->
+                <div class="setting-row">
+                    <span class="setting-label">BASS GAIN</span>
+                    <input type="range" class="setting-slider" id="s-bass" min="0" max="3" step="0.1" value="1.5">
+                    <span class="setting-val" id="v-bass">1.5</span>
+                </div>
+                <!-- High Gain -->
+                <div class="setting-row">
+                    <span class="setting-label">HIGH GAIN</span>
+                    <input type="range" class="setting-slider" id="s-high" min="0" max="3" step="0.1" value="1.0">
+                    <span class="setting-val" id="v-high">1.0</span>
+                </div>
+                <!-- Distortion Shape -->
+                <div class="setting-row">
+                    <span class="setting-label">DEFORM</span>
+                    <input type="range" class="setting-slider" id="s-dist" min="0" max="2" step="0.1" value="1.0">
+                    <span class="setting-val" id="v-dist">1.0</span>
+                </div>
+                <!-- Glow Strength -->
+                <div class="setting-row">
+                    <span class="setting-label">GLOW</span>
+                    <input type="range" class="setting-slider" id="s-glow" min="0.1" max="2.0" step="0.1" value="0.8">
+                    <span class="setting-val" id="v-glow">0.8</span>
+                </div>
+                <!-- Attack -->
+                <div class="setting-row">
+                    <span class="setting-label">ATTACK</span>
+                    <input type="range" class="setting-slider" id="s-attack" min="1" max="12" step="0.5" value="6.0">
+                    <span class="setting-val" id="v-attack">6.0</span>
+                </div>
+                <!-- Release -->
+                <div class="setting-row">
+                    <span class="setting-label">RELEASE</span>
+                    <input type="range" class="setting-slider" id="s-release" min="1" max="12" step="0.5" value="3.0">
+                    <span class="setting-val" id="v-release">3.0</span>
+                </div>
+
+                <div class="save-row">
+                    <button class="action-btn" id="reset-btn">RESET DEFAULT</button>
+                    <button class="action-btn" id="save-btn" style="border-color:#00ffff;">SAVE CONFIG</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="error-modal" class="modal">
+        <h3>LOAD FAILED</h3>
+        <p style="font-size:12px; color:#aaa; margin-bottom:20px;">Browser blocked auto-load.</p>
+        <button id="fallback-btn" class="cyber-btn" style="font-size:14px; padding:10px 20px;">SELECT FILE</button>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js';
+
+        // --- CONFIG & DEFAULTS ---
+        const DEFAULT_CONFIG = {
+            bassGain: 1.5,
+            highGain: 0.8, // Reduced default high gain for cleaner look
+            distortion: 1.2,
+            glow: 0.8,
+            attack: 6.0,   // How fast visuals respond when energy rises
+            release: 3.0,  // Slightly slower decay
+            pattern: 1 // Spikes default
+        };
+        const DEFAULT_AUDIO_URL = 'ROCK ID 19.mp3';
+        
+        // Copy for runtime modification
+        const USER_CONFIG = { ...DEFAULT_CONFIG };
+        const LOCAL_STORAGE_KEY = 'neon_core_v10_config';
+
+        // --- Global State ---
+        let sound, analyser;
+        let isPlaying = false;
+        let progressStart = 0;   // AudioContext time when playback began
+        let progressOffset = 0;  // Accumulated offset into the buffer
+        let patternIndex = 1; // 初始化放在这里，防止访问前未初始化
+        const patternNames = ["LIQUID", "SPIKES", "PULSE"];
+        const patternColors = [
+            { a: 0x001133, b: 0x00ffff }, 
+            { a: 0x220000, b: 0xff0044 }, 
+            { a: 0x002200, b: 0xaaff00 }
+        ];
+
+        // --- SAVE/LOAD SYSTEM ---
+        function loadSettings() {
+            const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if(saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    Object.assign(USER_CONFIG, parsed);
+                    console.log("Config loaded:", USER_CONFIG);
+                } catch(e) { console.error("Save file corrupt"); }
+            }
+            updateUIValues();
+        }
+
+        function saveSettings() {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(USER_CONFIG));
+            showToast("CONFIG SAVED");
+        }
+
+        function resetSettings() {
+            Object.assign(USER_CONFIG, DEFAULT_CONFIG);
+            updateUIValues();
+            saveSettings();
+            showToast("RESET COMPLETE");
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.opacity = 1;
+            setTimeout(() => t.style.opacity = 0, 2000);
+        }
+
+        const trackTitleEl = document.querySelector('.track-title');
+
+        function setTrackTitle(name) {
+            const cleaned = (name || 'UNKNOWN').replace(/\.[^/.]+$/, '');
+            trackTitleEl.innerText = cleaned;
+        }
+
+        function setTrackTitleFromUrl(url) {
+            const base = url ? url.split('/').pop() : '';
+            setTrackTitle(base || 'UNKNOWN');
+        }
+
+        // --- UI Binding ---
+        const sBass = document.getElementById('s-bass');
+        const sHigh = document.getElementById('s-high');
+        const sDist = document.getElementById('s-dist');
+        const sGlow = document.getElementById('s-glow');
+        const sAttack = document.getElementById('s-attack');
+        const sRelease = document.getElementById('s-release');
+        
+        function updateUIValues() {
+            sBass.value = USER_CONFIG.bassGain; document.getElementById('v-bass').innerText = USER_CONFIG.bassGain.toFixed(1);
+            sHigh.value = USER_CONFIG.highGain; document.getElementById('v-high').innerText = USER_CONFIG.highGain.toFixed(1);
+            sDist.value = USER_CONFIG.distortion; document.getElementById('v-dist').innerText = USER_CONFIG.distortion.toFixed(1);
+            sGlow.value = USER_CONFIG.glow; document.getElementById('v-glow').innerText = USER_CONFIG.glow.toFixed(1);
+            sAttack.value = USER_CONFIG.attack; document.getElementById('v-attack').innerText = USER_CONFIG.attack.toFixed(1);
+            sRelease.value = USER_CONFIG.release; document.getElementById('v-release').innerText = USER_CONFIG.release.toFixed(1);
+            
+            // Sync Mode
+            patternIndex = USER_CONFIG.pattern;
+            document.getElementById('mode-display').innerText = patternNames[patternIndex];
+        }
+
+        // Listeners
+        sBass.oninput = (e) => { USER_CONFIG.bassGain = parseFloat(e.target.value); document.getElementById('v-bass').innerText = e.target.value; };
+        sHigh.oninput = (e) => { USER_CONFIG.highGain = parseFloat(e.target.value); document.getElementById('v-high').innerText = e.target.value; };
+        sDist.oninput = (e) => { USER_CONFIG.distortion = parseFloat(e.target.value); document.getElementById('v-dist').innerText = e.target.value; };
+        sGlow.oninput = (e) => { USER_CONFIG.glow = parseFloat(e.target.value); document.getElementById('v-glow').innerText = e.target.value; };
+        sAttack.oninput = (e) => { USER_CONFIG.attack = parseFloat(e.target.value); document.getElementById('v-attack').innerText = parseFloat(e.target.value).toFixed(1); };
+        sRelease.oninput = (e) => { USER_CONFIG.release = parseFloat(e.target.value); document.getElementById('v-release').innerText = parseFloat(e.target.value).toFixed(1); };
+        
+        document.getElementById('save-btn').onclick = saveSettings;
+        document.getElementById('reset-btn').onclick = resetSettings;
+        
+        document.getElementById('settings-toggle').onclick = () => {
+            document.getElementById('settings-panel').classList.toggle('open');
+        };
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.02);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 7.5;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.5;
+
+        // --- SHADER V10 (Smart Gate & Params) ---
+        const vertexShader = `
+            uniform float uTime;
+            uniform float uBass; 
+            uniform float uKick; 
+            uniform float uHigh;
+            uniform float uPattern;
+            uniform float uIntensity;
+            
+            // Manual Controls
+            uniform float uDistAmount; 
+            
+            varying vec2 vUv;
+            varying float vDisp;
+            varying vec3 vNorm;
+            varying float vKick;
+            varying float vHigh;
+
+            // Simplex Noise (Standard)
+            vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+            vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+            float snoise(vec3 v) {
+                const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+                const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+                vec3 i  = floor(v + dot(v, C.yyy) );
+                vec3 x0 = v - i + dot(i, C.xxx) ;
+                vec3 g = step(x0.yzx, x0.xyz);
+                vec3 l = 1.0 - g;
+                vec3 i1 = min( g.xyz, l.zxy );
+                vec3 i2 = max( g.xyz, l.zxy );
+                vec3 x1 = x0 - i1 + C.xxx;
+                vec3 x2 = x0 - i2 + C.yyy;
+                vec3 x3 = x0 - D.yyy;
+                i = mod289(i);
+                vec4 p = permute( permute( permute(
+                            i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                        + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                        + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+                float n_ = 0.142857142857;
+                vec3  ns = n_ * D.wyz - D.xzx;
+                vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                vec4 x_ = floor(j * ns.z);
+                vec4 y_ = floor(j - 7.0 * x_ );
+                vec4 x = x_ *ns.x + ns.yyyy;
+                vec4 y = y_ *ns.x + ns.yyyy;
+                vec4 h = 1.0 - abs(x) - abs(y);
+                vec4 b0 = vec4( x.xy, y.xy );
+                vec4 b1 = vec4( x.zw, y.zw );
+                vec4 s0 = floor(b0)*2.0 + 1.0;
+                vec4 s1 = floor(b1)*2.0 + 1.0;
+                vec4 sh = -step(h, vec4(0.0));
+                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+                vec3 p0 = vec3(a0.xy,h.x);
+                vec3 p1 = vec3(a0.zw,h.y);
+                vec3 p2 = vec3(a1.xy,h.z);
+                vec3 p3 = vec3(a1.zw,h.w);
+                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                p0 *= norm.x;
+                p1 *= norm.y;
+                p2 *= norm.z;
+                p3 *= norm.w;
+                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                m = m * m;
+                return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
+                                            dot(p2,x2), dot(p3,x3) ) );
+            }
+
+            void main() {
+                vUv = uv;
+                vNorm = normal;
+                vKick = uKick * uIntensity;
+                vHigh = uHigh * uIntensity;
+
+                // Scale inputs by intensity & User Distortion param
+                float activeBass = uBass * uIntensity * uDistAmount;
+                
+                // Patterns
+                float liquid = snoise(position * 0.8 + uTime * 0.8); 
+                float d1 = liquid * (0.3 + activeBass * 1.5); 
+
+                float spikeNoise = abs(snoise(position * 3.0 + uTime * 0.5));
+                float d2 = spikeNoise * (0.2 + activeBass * 3.0); 
+
+                float pulseWave = sin(position.y * 10.0 - uTime * 6.0) * cos(position.x * 5.0);
+                float d3 = pulseWave * (0.2 + activeBass * 2.0); 
+
+                float finalDisp = 0.0;
+                float p = clamp(uPattern, 0.0, 2.0);
+                if (p < 1.0) finalDisp = mix(d1, d2, p);
+                else finalDisp = mix(d2, d3, p - 1.0);
+
+                // Kick Explosion
+                float boomNoise = snoise(position * 8.0 + uTime * 20.0); 
+                float kickExplosion = (uKick * uIntensity) * (0.5 + boomNoise * 0.3) * uDistAmount;
+                
+                // Jitter (Static) - Reduced by default, boosted by uHigh
+                float jitter = snoise(position * 25.0 + uTime * 20.0) * vHigh * 0.2;
+
+                vDisp = finalDisp + kickExplosion;
+                
+                vec3 newPos = position + normal * (finalDisp + kickExplosion + jitter);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPos, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float uBass;
+            uniform float uHigh;
+            uniform vec3 uColorA;
+            uniform vec3 uColorB;
+            uniform float uIntensity;
+            
+            varying float vDisp;
+            varying vec3 vNorm;
+            varying float vKick;
+            varying float vHigh;
+
+            void main() {
+                vec3 color = vec3(0.0);
+                
+                float t = smoothstep(-0.5, 1.5, vDisp);
+                vec3 baseC = mix(uColorA, uColorB, t);
+                
+                // Bass Breath
+                color += baseC * (0.2 + uBass * 0.4) * uIntensity; 
+                
+                // High Freq Flash - Using squared high to create a "Gate" effect
+                // Only strong highs will create significant brightness
+                float gatedHigh = pow(vHigh, 2.0); 
+                color += baseC * gatedHigh * 2.0;
+
+                // Rim
+                float fresnel = pow(1.0 - abs(dot(vNorm, vec3(0.0,0.0,1.0))), 3.0);
+                color += uColorB * fresnel * 0.5 * uIntensity;
+
+                // Wireframe - Only appear on clean highs
+                float grid = abs(sin(vNorm.x * 60.0) * sin(vNorm.y * 60.0));
+                // Applying gate to grid so it doesn't look noisy constantly
+                float gridVis = smoothstep(0.2, 1.0, vHigh); 
+                color += vec3(grid) * gridVis * 1.5 * uIntensity;
+                
+                // Kick Flash
+                color += vec3(1.0, 1.0, 1.0) * vKick * 0.7;
+                
+                // Idle
+                color += uColorB * fresnel * 0.1; 
+
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        const coreGeo = new THREE.IcosahedronGeometry(2.0, 120); 
+        const coreMat = new THREE.ShaderMaterial({
+            vertexShader,
+            fragmentShader,
+            uniforms: {
+                uTime: { value: 0 },
+                uBass: { value: 0 },
+                uKick: { value: 0 },
+                uHigh: { value: 0 },
+                uPattern: { value: USER_CONFIG.pattern },
+                uIntensity: { value: 1.0 },
+                uDistAmount: { value: USER_CONFIG.distortion },
+                uColorA: { value: new THREE.Color(patternColors[1].a) },
+                uColorB: { value: new THREE.Color(patternColors[1].b) }
+            }
+        });
+        const core = new THREE.Mesh(coreGeo, coreMat);
+        scene.add(core);
+
+        const inner = new THREE.Mesh(
+            new THREE.IcosahedronGeometry(1.2, 2),
+            new THREE.MeshBasicMaterial({ color: 0x000000 })
+        );
+        scene.add(inner);
+
+        // --- Particles ---
+        const pGeo = new THREE.BufferGeometry();
+        const pPos = new Float32Array(4000 * 3);
+        for(let i=0; i<4000*3; i++) {
+            pPos[i] = (Math.random() - 0.5) * 25;
+        }
+        pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+        const pMat = new THREE.PointsMaterial({
+            color: 0x555555, size: 0.05, transparent: true, opacity: 0.4,
+            blending: THREE.AdditiveBlending
+        });
+        const particles = new THREE.Points(pGeo, pMat);
+        scene.add(particles);
+
+        // --- Post Process ---
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        
+        const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        composer.addPass(bloom);
+
+        const rgb = new ShaderPass(RGBShiftShader);
+        rgb.uniforms['amount'].value = 0.002;
+        composer.addPass(rgb);
+
+        // --- Init Audio ---
+        async function initAudio() {
+            const listener = new THREE.AudioListener();
+            camera.add(listener);
+            sound = new THREE.Audio(listener);
+            const loader = new THREE.AudioLoader();
+
+            try {
+                const buffer = await loader.loadAsync(DEFAULT_AUDIO_URL);
+                sound.setBuffer(buffer);
+                sound.setLoop(true);
+                sound.setVolume(0.8);
+                analyser = new THREE.AudioAnalyser(sound, 1024);
+                progressOffset = 0;
+                progressStart = sound.context.currentTime;
+                setTrackTitleFromUrl(DEFAULT_AUDIO_URL);
+                return true;
+            } catch (e) {
+                console.error(e);
+                document.getElementById('error-modal').style.display = 'block';
+                return false;
+            }
+        }
+
+        // --- Main Logic ---
+        loadSettings(); // Load config on startup
+        
+        // 移除了这里重新声明 patternIndex 的代码，因为它现在是一个全局变量
+
+        // UI Handlers
+        const startBtn = document.getElementById('start-btn');
+        const overlay = document.getElementById('overlay');
+        const hud = document.getElementById('hud');
+        const playBtn = document.getElementById('play-btn');
+        const timeDisplay = document.getElementById('time-display');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const modeDisplay = document.getElementById('mode-display');
+        const btnPrev = document.getElementById('prev-mode');
+        const btnNext = document.getElementById('next-mode');
+        const uploadBtn = document.getElementById('upload-btn');
+
+        // Hidden input reused for uploads
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'audio/*';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        function beginPlayback(fromOffset = 0) {
+            if(!sound || !sound.buffer) return;
+            const duration = sound.buffer.duration;
+            progressOffset = ((fromOffset % duration) + duration) % duration;
+            sound.offset = progressOffset;
+            sound.play();
+            progressStart = sound.context.currentTime;
+            isPlaying = true;
+            playBtn.innerText = 'II';
+        }
+
+        function pausePlayback() {
+            if(!sound || !sound.buffer) return;
+            const elapsed = (sound.context.currentTime - progressStart) * sound.playbackRate;
+            progressOffset = (progressOffset + Math.max(0, elapsed)) % sound.buffer.duration;
+            sound.pause();
+            isPlaying = false;
+            playBtn.innerText = '▶';
+        }
+
+        startBtn.onclick = async () => {
+            startBtn.innerText = "LOADING...";
+            if(await initAudio()) {
+                beginPlayback(0);
+                overlay.style.opacity = 0;
+                setTimeout(()=>overlay.style.display='none', 500);
+                hud.classList.add('active');
+            }
+        };
+
+        playBtn.onclick = () => {
+            if(!sound || !sound.buffer) return;
+            if(isPlaying) pausePlayback();
+            else beginPlayback(progressOffset);
+        };
+
+        async function handleFileUpload(e) {
+            if(!e.target.files[0]) return;
+            const file = e.target.files[0];
+            const url = URL.createObjectURL(file);
+            setTrackTitle(file.name);
+            const loader = new THREE.AudioLoader();
+            const buf = await loader.loadAsync(url);
+            
+            if(sound) sound.stop();
+            const listener = new THREE.AudioListener();
+            camera.add(listener);
+            sound = new THREE.Audio(listener);
+            sound.setBuffer(buf);
+            sound.setLoop(true);
+            analyser = new THREE.AudioAnalyser(sound, 1024);
+            document.getElementById('error-modal').style.display='none';
+            
+            progressOffset = 0;
+            progressStart = sound.context.currentTime;
+            beginPlayback(0);
+            overlay.style.display='none'; hud.classList.add('active');
+            
+            // reset input so same file can be reselected later
+            e.target.value = '';
+        }
+
+        function setMode(idx) {
+            patternIndex = idx;
+            if(patternIndex < 0) patternIndex = 2;
+            if(patternIndex > 2) patternIndex = 0;
+            USER_CONFIG.pattern = patternIndex; // Update config
+            modeDisplay.innerText = patternNames[patternIndex];
+        }
+        btnPrev.onclick = () => setMode(patternIndex - 1);
+        btnNext.onclick = () => setMode(patternIndex + 1);
+
+        progressContainer.onclick = (e) => {
+            if(!sound || !sound.buffer) return;
+            const rect = progressContainer.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            const newOffset = pct * sound.buffer.duration;
+            if(isPlaying) {
+                sound.stop();
+                beginPlayback(newOffset);
+            } else {
+                progressOffset = newOffset;
+                sound.offset = progressOffset;
+                progressBar.style.width = (pct * 100) + '%';
+                timeDisplay.innerText = `${fmtTime(progressOffset)} / ${fmtTime(sound.buffer.duration)}`;
+            }
+        };
+
+        document.getElementById('fallback-btn').onclick = () => {
+            fileInput.onchange = handleFileUpload;
+            fileInput.click();
+        }
+
+        uploadBtn.onclick = () => {
+            fileInput.onchange = handleFileUpload;
+            fileInput.click();
+        };
+
+        // --- Loop ---
+        const clock = new THREE.Clock();
+        let kickImpulse = 0;
+        let lastLowAvg = 0;
+        let currentIntensity = 1.0;
+
+        function fmtTime(t) {
+            const m = Math.floor(t/60); const s = Math.floor(t%60);
+            return `${m}:${s<10?'0':''}${s}`;
+        }
+
+        function updateProgressUI(curr, duration) {
+            if(!duration) return;
+            progressBar.style.width = (curr / duration * 100) + '%';
+            timeDisplay.innerText = `${fmtTime(curr)} / ${fmtTime(duration)}`;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            const time = clock.elapsedTime;
+
+            // Apply User Configs from UI each frame (or optimize to only on change)
+            bloom.strength = USER_CONFIG.glow;
+            coreMat.uniforms.uDistAmount.value = USER_CONFIG.distortion;
+
+            // Intensity Fade
+            const targetIntensity = isPlaying ? 1.0 : 0.05;
+            currentIntensity = THREE.MathUtils.lerp(currentIntensity, targetIntensity, 0.05);
+            coreMat.uniforms.uIntensity.value = currentIntensity;
+            pMat.opacity = THREE.MathUtils.lerp(pMat.opacity, isPlaying ? 0.5 : 0.1, 0.05);
+
+            if (analyser && isPlaying) {
+                const data = analyser.getFrequencyData();
+                
+                // --- BASS / HIGH LOGIC ---
+                const kickThreshold = 0.55;    // require stronger low-end to trigger
+                const kickRiseFactor = 1.35;   // needs to beat recent average
+                const highGate = 0.35;         // gate highs harder to avoid constant flicker
+                const highExpand = 1.7;        // expand after gate for punch
+
+                let lowSum = 0;
+                for(let i=1; i<6; i++) lowSum += data[i];
+                const lowLevel = lowSum / (5 * 255);
+                
+                // Kick Detect
+                if (lowLevel > kickThreshold && lowLevel > lastLowAvg * kickRiseFactor) kickImpulse = 1.0;
+                lastLowAvg = lowLevel * 0.1 + lastLowAvg * 0.9; 
+                kickImpulse = THREE.MathUtils.lerp(kickImpulse, 0, 0.07); // slower decay for deeper hits
+                
+                // --- HIGH LOGIC (Gated) ---
+                let highSum = 0;
+                // Focus closer to snare/hats frequency
+                for(let i=80; i<150; i++) highSum += data[i];
+                let highLevel = highSum / (70 * 255);
+
+                // Smart Gate: Kill low volume high-freq noise
+                if (highLevel < highGate) highLevel = 0.0;
+                else highLevel = (highLevel - highGate) * highExpand; // Expand range
+
+                // Apply Manual Gains
+                const finalBass = lowLevel * USER_CONFIG.bassGain;
+                const finalHigh = highLevel * USER_CONFIG.highGain;
+
+                const attackRate = USER_CONFIG.attack;
+                const releaseRate = USER_CONFIG.release;
+                const smoothAudio = (current, target) => {
+                    const rate = target > current ? attackRate : releaseRate;
+                    const k = 1 - Math.exp(-dt * rate);
+                    return THREE.MathUtils.lerp(current, target, k);
+                };
+
+                coreMat.uniforms.uBass.value = smoothAudio(coreMat.uniforms.uBass.value, finalBass);
+                coreMat.uniforms.uKick.value = kickImpulse; 
+                coreMat.uniforms.uHigh.value = smoothAudio(coreMat.uniforms.uHigh.value, finalHigh);
+
+                // Particles
+                const pScale = 1.0 + kickImpulse * 0.8 + finalBass * 0.3;
+                particles.scale.setScalar(pScale);
+                
+                // Progress
+                const duration = sound.buffer.duration;
+                const elapsed = (sound.context.currentTime - progressStart) * sound.playbackRate;
+                const curr = (progressOffset + Math.max(0, elapsed)) % duration;
+                updateProgressUI(curr, duration);
+
+            } else {
+                 coreMat.uniforms.uBass.value = THREE.MathUtils.lerp(coreMat.uniforms.uBass.value, 0.0, 0.05);
+                 coreMat.uniforms.uKick.value = 0;
+                 coreMat.uniforms.uHigh.value = 0;
+                 
+                 // Keep UI steady while paused
+                 if (sound && sound.buffer) {
+                    updateProgressUI(progressOffset % sound.buffer.duration, sound.buffer.duration);
+                 }
+            }
+
+            const c = patternColors[patternIndex];
+            coreMat.uniforms.uColorA.value.lerp(new THREE.Color(c.a), 0.05);
+            coreMat.uniforms.uColorB.value.lerp(new THREE.Color(c.b), 0.05);
+            coreMat.uniforms.uPattern.value = THREE.MathUtils.lerp(coreMat.uniforms.uPattern.value, patternIndex, 0.05);
+            coreMat.uniforms.uTime.value = time;
+            
+            const rotSpeed = isPlaying ? 0.002 + kickImpulse * 0.02 : 0.0005;
+            core.rotation.y += rotSpeed;
+            particles.rotation.y += isPlaying ? 0.001 : 0.0002;
+
+            controls.update();
+            composer.render();
+        }
+
+        window.onresize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        };
+
+        animate();
+    </script>
+</body>
+</html>
