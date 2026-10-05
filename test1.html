@@ -3,131 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Core V10 - Custom & Save</title>
+    <title>Neon Core V11</title>
     <style>
+        :root { --c: #00ffff; --kick: #ff3355; --bass: #ffaa00; --high: #00ffff; }
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
         canvas { display: block; }
 
         /* --- UI UTILS --- */
-        input[type=range] {
-            -webkit-appearance: none; width: 100%; background: transparent; margin: 8px 0;
-        }
+        input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; background: transparent; margin: 6px 0; }
         input[type=range]:focus { outline: none; }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px;
-        }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px; }
         input[type=range]::-webkit-slider-thumb {
-            height: 14px; width: 14px; border-radius: 50%; background: #00ffff; cursor: pointer;
-            -webkit-appearance: none; margin-top: -5px; box-shadow: 0 0 10px #00ffff;
+            height: 14px; width: 14px; border-radius: 50%; background: var(--c); cursor: pointer;
+            -webkit-appearance: none; margin-top: -5px; box-shadow: 0 0 10px var(--c);
         }
+        input[type=range]::-moz-range-track { height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; }
+        input[type=range]::-moz-range-thumb { height: 14px; width: 14px; border: none; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); }
 
         /* --- LAYOUT --- */
         #overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.96);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            position: absolute; inset: 0; background: rgba(0,0,0,0.96);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px;
             z-index: 100; transition: opacity 0.5s ease;
         }
-        
+        #overlay .sub-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        #overlay .hint { color: #555; font-size: 11px; letter-spacing: 1px; margin-top: 18px; text-align: center; line-height: 1.8; }
+
         .cyber-btn {
-            background: transparent; color: #00ffff; border: 1px solid #00ffff;
-            padding: 15px 40px; font-size: 18px; letter-spacing: 4px; cursor: pointer;
-            text-transform: uppercase; transition: 0.3s;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+            background: transparent; color: var(--c); border: 1px solid var(--c);
+            padding: 15px 40px; font-size: 18px; letter-spacing: 4px; cursor: pointer; font-family: inherit;
+            text-transform: uppercase; transition: 0.3s; box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
         }
-        .cyber-btn:hover { background: rgba(0, 255, 255, 0.1); box-shadow: 0 0 30px rgba(0, 255, 255, 0.6); color: white; border-color: white;}
+        .cyber-btn.small { padding: 8px 16px; font-size: 12px; letter-spacing: 2px; }
+        .cyber-btn:hover { background: rgba(0, 255, 255, 0.1); box-shadow: 0 0 30px rgba(0, 255, 255, 0.6); color: white; border-color: white; }
 
         #hud {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            width: 90%; max-width: 500px;
-            pointer-events: none; opacity: 0; transition: opacity 1s;
-            z-index: 10;
+            width: calc(100% - 32px); max-width: 560px;
+            pointer-events: none; opacity: 0; transition: opacity 0.6s; z-index: 10;
         }
         #hud.active { opacity: 1; pointer-events: auto; }
+        #hud.active.hidden { opacity: 0; pointer-events: none; }
 
-        /* Main Panel */
         .hud-panel {
             background: rgba(5, 5, 5, 0.85); border: 1px solid rgba(0, 255, 255, 0.15);
-            backdrop-filter: blur(12px); padding: 20px; border-radius: 8px;
-            box-shadow: 0 0 40px rgba(0,0,0,0.8);
-            display: flex; flex-direction: column; gap: 15px;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 18px; border-radius: 8px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 12px;
         }
 
-        /* Top Bar */
-        .track-header { display: flex; justify-content: space-between; align-items: flex-end; }
-        .track-title { color: #fff; font-size: 14px; letter-spacing: 2px; font-weight: bold; }
-        .track-time { color: #666; font-size: 12px; }
+        .track-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+        .track-title { color: #fff; font-size: 14px; letter-spacing: 2px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .track-time { color: #666; font-size: 12px; white-space: nowrap; }
 
-        /* Progress */
         .progress-container {
-            width: 100%; height: 6px; background: rgba(255,255,255,0.05);
-            cursor: pointer; position: relative; border-radius: 3px; overflow: hidden; margin: 5px 0;
+            width: 100%; height: 6px; background: rgba(255,255,255,0.05); touch-action: none;
+            cursor: pointer; position: relative; border-radius: 3px; overflow: hidden;
         }
-        .progress-bar {
-            height: 100%; width: 0%; background: #00ffff;
-            box-shadow: 0 0 10px #00ffff; transition: width 0.05s linear;
-        }
+        .progress-container.live { cursor: default; }
+        .progress-bar { height: 100%; width: 100%; background: var(--c); box-shadow: 0 0 10px var(--c); transform-origin: left; transform: scaleX(0); }
+        .progress-container.live .progress-bar { transform: none !important; opacity: 0.25; animation: livepulse 1.6s ease-in-out infinite; }
+        @keyframes livepulse { 50% { opacity: 0.6; } }
 
-        /* Controls */
-        .controls-row { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
-        
+        .controls-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
         .play-btn {
-            width: 36px; height: 36px; border-radius: 50%; border: 1px solid #00ffff;
-            background: transparent; color: #00ffff; cursor: pointer; display: flex; justify-content: center; align-items: center;
-            font-size: 16px; transition: 0.2s;
+            width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--c); flex-shrink: 0;
+            background: transparent; color: var(--c); cursor: pointer; display: flex; justify-content: center; align-items: center;
+            font-size: 14px; transition: 0.2s; font-family: inherit;
         }
         .play-btn:hover { background: rgba(0,255,255,0.2); box-shadow: 0 0 15px rgba(0,255,255,0.4); }
 
-        .mode-control { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; }
-        .mode-btn { background: none; border: none; color: #888; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .pill { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 20px; }
+        .mode-btn { background: none; border: none; color: #888; cursor: pointer; font-size: 16px; font-weight: bold; font-family: inherit; }
         .mode-btn:hover { color: #fff; }
-        #mode-display { color: #00ffff; font-size: 11px; width: 80px; text-align: center; font-weight: bold; }
-
-        /* Settings Toggle */
-        #settings-toggle {
-            background: none; border: 1px solid #444; color: #888; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 10px; letter-spacing: 1px;
+        #mode-display { color: var(--c); font-size: 11px; width: 78px; text-align: center; font-weight: bold; }
+        .tiny-btn {
+            background: none; border: 1px solid #444; color: #777; padding: 3px 7px; border-radius: 4px; cursor: pointer;
+            font-size: 10px; letter-spacing: 1px; font-family: inherit;
         }
-        #settings-toggle:hover { border-color: #fff; color: #fff; }
+        .tiny-btn:hover { border-color: #fff; color: #fff; }
+        .tiny-btn.on { border-color: var(--c); color: #000; background: var(--c); }
 
-        /* Advanced Settings Panel */
         #settings-panel {
-            display: none; flex-direction: column; gap: 10px; margin-top: 10px; 
-            padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);
+            display: none; flex-direction: column; gap: 8px;
+            padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);
+            max-height: calc(100vh - 230px); overflow-y: auto; overflow-x: hidden;
         }
         #settings-panel.open { display: flex; }
 
+        .section-title { display: flex; align-items: center; gap: 8px; color: #888; font-size: 10px; letter-spacing: 2px; }
+        .section-title .hint { color: #555; letter-spacing: 0; margin-left: auto; text-align: right; }
+
+        #spectrum { width: 100%; height: 140px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; touch-action: none; }
+        #kick-scope { width: 100%; height: 54px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; touch-action: none; cursor: ns-resize; }
+
+        .band-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .band-chip {
+            font-size: 10px; padding: 3px 7px; border-radius: 4px; cursor: pointer; color: #aaa;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); white-space: nowrap;
+        }
+        .band-chip.active { color: #fff; border-color: currentColor; }
+        .band-chip b { font-weight: bold; }
+
+        #kick-led { width: 8px; height: 8px; border-radius: 50%; background: var(--kick); opacity: 0.1; box-shadow: 0 0 8px var(--kick); }
+        #bpm { color: var(--kick); }
+
         .setting-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #aaa; }
-        .setting-label { min-width: 80px; }
-        .setting-val { width: 30px; text-align: right; color: #00ffff; }
+        .setting-label { min-width: 96px; }
+        .setting-val { width: 38px; text-align: right; color: var(--c); }
         .setting-slider { flex-grow: 1; margin: 0 10px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+        @media (max-width: 520px) { .grid-2 { grid-template-columns: 1fr; } .setting-label { min-width: 84px; } }
 
-        .save-row { display: flex; justify-content: space-between; margin-top: 10px; }
-        .action-btn { 
-            background: rgba(0,255,255,0.1); border: 1px solid #00ffff; color: #00ffff; 
-            padding: 5px 15px; cursor: pointer; font-size: 10px; 
-        }
-        .action-btn:hover { background: #00ffff; color: #000; }
-        #toast { 
-            position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
-            background: #00ffff; color: #000; padding: 5px 10px; border-radius: 4px;
-            font-size: 10px; opacity: 0; transition: opacity 0.5s; pointer-events: none;
-        }
+        select.tiny-btn { background: #111; }
 
-        /* Error Modal */
+        .save-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; }
+        .action-btn {
+            background: rgba(0,255,255,0.1); border: 1px solid var(--c); color: var(--c); border-radius: 4px;
+            padding: 5px 12px; cursor: pointer; font-size: 10px; font-family: inherit; letter-spacing: 1px;
+        }
+        .action-btn:hover { background: var(--c); color: #000; }
+        .action-btn.on { background: var(--c); color: #000; }
+        .keys-hint { color: #555; font-size: 10px; line-height: 1.6; }
+
+        #toast {
+            position: absolute; top: -36px; left: 50%; transform: translateX(-50%);
+            background: var(--c); color: #000; padding: 5px 10px; border-radius: 4px; white-space: nowrap;
+            font-size: 11px; opacity: 0; transition: opacity 0.4s; pointer-events: none;
+        }
+        #drop-hint {
+            position: fixed; inset: 0; z-index: 300; display: none; align-items: center; justify-content: center;
+            border: 2px dashed var(--c); color: var(--c); background: rgba(0,0,0,0.6); font-size: 16px; letter-spacing: 4px; pointer-events: none;
+        }
+        #drop-hint.show { display: flex; }
+
         .modal {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: #111; border: 1px solid #ff0055; padding: 30px; z-index: 200;
-            color: white; text-align: center; display: none;
-            box-shadow: 0 0 50px rgba(255, 0, 85, 0.2);
+            color: white; text-align: center; display: none; box-shadow: 0 0 50px rgba(255, 0, 85, 0.2);
         }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1 style="color:white; font-size:12px; letter-spacing:6px; margin-bottom:40px; opacity:0.6;">SYSTEM V10 // CUSTOM CORE</h1>
+        <h1 style="color:white; font-size:12px; letter-spacing:6px; margin-bottom:26px; opacity:0.6;">SYSTEM V11 // CUSTOM CORE</h1>
         <button id="start-btn" class="cyber-btn">INITIALIZE</button>
+        <div class="sub-row">
+            <button class="cyber-btn small" data-src="file">FILE</button>
+            <button class="cyber-btn small" data-src="mic">MIC</button>
+            <button class="cyber-btn small" data-src="system">SYSTEM AUDIO</button>
+        </div>
+        <div class="hint">也可直接把音频文件拖进窗口<br>SYSTEM AUDIO：在共享对话框里选择“标签页/整个屏幕”并勾选“共享音频”</div>
     </div>
+
+    <div id="drop-hint">DROP AUDIO FILE</div>
 
     <div id="hud">
         <div id="toast">SETTINGS SAVED</div>
@@ -142,61 +172,52 @@
             </div>
 
             <div class="controls-row">
-                <button class="play-btn" id="play-btn">▶</button>
-                
-                <div class="mode-control">
-                    <button class="mode-btn" id="prev-mode">&lt;</button>
+                <button class="play-btn" id="play-btn" title="Space">▶</button>
+
+                <div class="pill">
+                    <button class="mode-btn" id="prev-mode" title="←">&lt;</button>
                     <span id="mode-display">SPIKES</span>
-                    <button class="mode-btn" id="next-mode">&gt;</button>
+                    <button class="mode-btn" id="next-mode" title="→">&gt;</button>
+                    <button class="tiny-btn" id="auto-btn" title="按 kick 数自动切换 pattern">AUTO</button>
                 </div>
 
-                <button id="settings-toggle">PARAMS ▼</button>
-                <button id="upload-btn" class="action-btn" style="border-radius:4px;">UPLOAD</button>
+                <div class="pill" id="source-pill">
+                    <button class="tiny-btn" data-src="file" title="上传/切换文件">FILE</button>
+                    <button class="tiny-btn" data-src="mic" title="麦克风">MIC</button>
+                    <button class="tiny-btn" data-src="system" title="系统/标签页音频">SYS</button>
+                </div>
+
+                <button class="tiny-btn" id="settings-toggle">PARAMS ▼</button>
             </div>
 
-            <!-- Settings Panel -->
             <div id="settings-panel">
-                <!-- Bass Gain -->
-                <div class="setting-row">
-                    <span class="setting-label">BASS GAIN</span>
-                    <input type="range" class="setting-slider" id="s-bass" min="0" max="3" step="0.1" value="1.5">
-                    <span class="setting-val" id="v-bass">1.5</span>
+                <div class="section-title">SPECTRUM <span class="hint">拖色块边缘=频段 · 拖色块中部=平移 · 拖虚线=阈值 · 双击=复位</span></div>
+                <canvas id="spectrum"></canvas>
+                <div class="band-row" id="band-row"></div>
+
+                <div class="section-title">KICK SCOPE <span id="kick-led"></span> <span id="bpm">--- BPM</span>
+                    <span class="hint">上下拖动=触发阈值</span>
+                    <button class="tiny-btn" id="auto-kick-btn" title="根据最近几秒的低频能量自动设置阈值">AUTO THRESH</button>
                 </div>
-                <!-- High Gain -->
+                <canvas id="kick-scope"></canvas>
+
+                <div class="grid-2" id="sliders"></div>
+
                 <div class="setting-row">
-                    <span class="setting-label">HIGH GAIN</span>
-                    <input type="range" class="setting-slider" id="s-high" min="0" max="3" step="0.1" value="1.0">
-                    <span class="setting-val" id="v-high">1.0</span>
-                </div>
-                <!-- Distortion Shape -->
-                <div class="setting-row">
-                    <span class="setting-label">DEFORM</span>
-                    <input type="range" class="setting-slider" id="s-dist" min="0" max="2" step="0.1" value="1.0">
-                    <span class="setting-val" id="v-dist">1.0</span>
-                </div>
-                <!-- Glow Strength -->
-                <div class="setting-row">
-                    <span class="setting-label">GLOW</span>
-                    <input type="range" class="setting-slider" id="s-glow" min="0.1" max="2.0" step="0.1" value="0.8">
-                    <span class="setting-val" id="v-glow">0.8</span>
-                </div>
-                <!-- Attack -->
-                <div class="setting-row">
-                    <span class="setting-label">ATTACK</span>
-                    <input type="range" class="setting-slider" id="s-attack" min="1" max="12" step="0.5" value="6.0">
-                    <span class="setting-val" id="v-attack">6.0</span>
-                </div>
-                <!-- Release -->
-                <div class="setting-row">
-                    <span class="setting-label">RELEASE</span>
-                    <input type="range" class="setting-slider" id="s-release" min="1" max="12" step="0.5" value="3.0">
-                    <span class="setting-val" id="v-release">3.0</span>
+                    <span class="setting-label">QUALITY</span>
+                    <select class="tiny-btn" id="quality-select">
+                        <option value="high">HIGH</option>
+                        <option value="med">MED</option>
+                        <option value="low">LOW</option>
+                    </select>
+                    <span style="flex-grow:1"></span>
                 </div>
 
                 <div class="save-row">
                     <button class="action-btn" id="reset-btn">RESET DEFAULT</button>
-                    <button class="action-btn" id="save-btn" style="border-color:#00ffff;">SAVE CONFIG</button>
+                    <button class="action-btn" id="save-btn">SAVE CONFIG</button>
                 </div>
+                <div class="keys-hint">参数修改会自动保存 · SPACE 播放/暂停 · ←/→ 切 pattern · 1-9,0 直选 · A 自动切换 · P 参数面板 · H 隐藏界面 · F 全屏</div>
             </div>
         </div>
     </div>
@@ -224,126 +245,435 @@
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
         import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js';
+        import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
-        // --- CONFIG & DEFAULTS ---
+        // =====================================================================
+        // CONFIG
+        // =====================================================================
+        const DEFAULT_AUDIO_URL = 'ROCK ID 19.mp3';
+        const LOCAL_STORAGE_KEY = 'neon_core_v11_config';
+        const LEGACY_STORAGE_KEY = 'neon_core_v10_config';
+
+        // 频段：lo/hi 单位 Hz；thr 是频谱图上的横线（0..1）
+        //   kick -> 触发阈值；bass/high -> 噪声门（低于此值视为 0，之上重新拉伸到 0..1）
+        const DEFAULT_BANDS = {
+            kick: { lo: 40,   hi: 130,  thr: 0.62 },
+            bass: { lo: 40,   hi: 250,  thr: 0.10 },
+            high: { lo: 3400, hi: 6500, thr: 0.30 },
+        };
         const DEFAULT_CONFIG = {
             bassGain: 1.5,
-            highGain: 0.8, // Reduced default high gain for cleaner look
+            highGain: 0.8,
             distortion: 1.2,
             glow: 0.8,
-            attack: 6.0,   // How fast visuals respond when energy rises
-            release: 3.0,  // Slightly slower decay
-            pattern: 1 // Spikes default
+            attack: 6.0,       // 能量上升时的响应速度
+            release: 3.0,      // 能量下降时的衰减速度
+            kickPower: 1.0,    // kick 视觉强度
+            kickDecay: 4.5,    // kick 冲击衰减速度 (1/s)
+            kickHold: 180,     // 两次 kick 的最小间隔 (ms)
+            kickOnset: 0.04,   // 相对近期均值至少要上升多少才算一次起音
+            inputGain: 1.0,    // 进入分析器前的增益（麦克风偏小时调大）
+            volume: 0.8,       // 仅影响监听音量，不影响视觉
+            cycleKicks: 32,
+            autoCycle: false,
+            quality: 'high',
+            pattern: 1,
+            bands: structuredClone(DEFAULT_BANDS),
         };
-        const DEFAULT_AUDIO_URL = 'ROCK ID 19.mp3';
-        
-        // Copy for runtime modification
-        const USER_CONFIG = { ...DEFAULT_CONFIG };
-        const LOCAL_STORAGE_KEY = 'neon_core_v10_config';
 
-        // --- Global State ---
-        let sound, analyser;
-        let isPlaying = false;
-        let progressStart = 0;   // AudioContext time when playback began
-        let progressOffset = 0;  // Accumulated offset into the buffer
-        let patternIndex = 1; // 初始化放在这里，防止访问前未初始化
-        const patternNames = ["LIQUID", "SPIKES", "PULSE"];
-        const patternColors = [
-            { a: 0x001133, b: 0x00ffff }, 
-            { a: 0x220000, b: 0xff0044 }, 
-            { a: 0x002200, b: 0xaaff00 }
+        const cfg = structuredClone(DEFAULT_CONFIG);
+
+        const PATTERNS = [
+            { name: 'LIQUID',    a: 0x001133, b: 0x00ffff },
+            { name: 'SPIKES',    a: 0x220000, b: 0xff0044 },
+            { name: 'PULSE',     a: 0x002200, b: 0xaaff00 },
+            { name: 'RIPPLE',    a: 0x000a22, b: 0x3399ff },
+            { name: 'VOXEL',     a: 0x1a0022, b: 0xcc33ff },
+            { name: 'VORTEX',    a: 0x221100, b: 0xff8800 },
+            { name: 'ORGANIC',   a: 0x001a14, b: 0x00ffaa },
+            { name: 'EQ SPHERE', a: 0x14100a, b: 0xffcc44 },
+            { name: 'GLITCH',    a: 0x220011, b: 0xff00aa },
+            { name: 'HARMONIC',  a: 0x0a0a22, b: 0x88aaff },
+        ];
+        PATTERNS.forEach(p => { p.ca = new THREE.Color(p.a); p.cb = new THREE.Color(p.b); });
+
+        const QUALITY = {
+            high: { detail: 120, pixelRatio: 2 },
+            med:  { detail: 80,  pixelRatio: 1.5 },
+            low:  { detail: 48,  pixelRatio: 1 },
+        };
+
+        const BAND_KEYS = ['kick', 'bass', 'high'];
+        const BAND_META = {
+            kick: { label: 'KICK', color: '#ff3355', line: 'TRIG' },
+            bass: { label: 'BASS', color: '#ffaa00', line: 'GATE' },
+            high: { label: 'HIGH', color: '#00ffff', line: 'GATE' },
+        };
+
+        const SLIDERS = [
+            { key: 'bassGain',   label: 'BASS GAIN',   min: 0,   max: 3,    step: 0.1 },
+            { key: 'highGain',   label: 'HIGH GAIN',   min: 0,   max: 3,    step: 0.1 },
+            { key: 'kickPower',  label: 'KICK POWER',  min: 0,   max: 2,    step: 0.1 },
+            { key: 'kickDecay',  label: 'KICK DECAY',  min: 1,   max: 12,   step: 0.5 },
+            { key: 'kickHold',   label: 'KICK HOLD ms',min: 60,  max: 500,  step: 10,   digits: 0 },
+            { key: 'kickOnset',  label: 'KICK ONSET',  min: 0,   max: 0.2,  step: 0.01, digits: 2 },
+            { key: 'distortion', label: 'DEFORM',      min: 0,   max: 2,    step: 0.1 },
+            { key: 'glow',       label: 'GLOW',        min: 0.1, max: 2,    step: 0.1 },
+            { key: 'attack',     label: 'ATTACK',      min: 1,   max: 12,   step: 0.5 },
+            { key: 'release',    label: 'RELEASE',     min: 1,   max: 12,   step: 0.5 },
+            { key: 'inputGain',  label: 'INPUT GAIN',  min: 0.25,max: 8,    step: 0.25, digits: 2 },
+            { key: 'volume',     label: 'VOLUME',      min: 0,   max: 1,    step: 0.05, digits: 2 },
+            { key: 'cycleKicks', label: 'AUTO KICKS',  min: 8,   max: 128,  step: 8,    digits: 0 },
         ];
 
-        // --- SAVE/LOAD SYSTEM ---
-        function loadSettings() {
-            const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-            if(saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    Object.assign(USER_CONFIG, parsed);
-                    console.log("Config loaded:", USER_CONFIG);
-                } catch(e) { console.error("Save file corrupt"); }
+        // =====================================================================
+        // SAVE / LOAD
+        // =====================================================================
+        function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+        function safeSet(key, val) { try { localStorage.setItem(key, val); return true; } catch (e) { return false; } }
+
+        function applySaved(saved) {
+            for (const k of Object.keys(DEFAULT_CONFIG)) {
+                if (k === 'bands' || !(k in saved)) continue;
+                if (typeof saved[k] === typeof DEFAULT_CONFIG[k]) cfg[k] = saved[k];
             }
-            updateUIValues();
+            if (saved.bands) {
+                for (const b of BAND_KEYS) {
+                    const s = saved.bands[b];
+                    if (s && isFinite(s.lo) && isFinite(s.hi) && isFinite(s.thr) && s.lo < s.hi) cfg.bands[b] = { lo: s.lo, hi: s.hi, thr: s.thr };
+                }
+            }
+            if (!QUALITY[cfg.quality]) cfg.quality = DEFAULT_CONFIG.quality;
+            cfg.pattern = Math.max(0, Math.min(PATTERNS.length - 1, cfg.pattern | 0));
         }
 
+        function loadSettings() {
+            const raw = safeGet(LOCAL_STORAGE_KEY) ?? safeGet(LEGACY_STORAGE_KEY);
+            if (!raw) return;
+            try { applySaved(JSON.parse(raw)); } catch (e) { console.error('Save file corrupt'); }
+        }
+
+        let saveTimer = 0;
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => safeSet(LOCAL_STORAGE_KEY, JSON.stringify(cfg)), 400);
+        }
         function saveSettings() {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(USER_CONFIG));
-            showToast("CONFIG SAVED");
+            clearTimeout(saveTimer);
+            showToast(safeSet(LOCAL_STORAGE_KEY, JSON.stringify(cfg)) ? 'CONFIG SAVED' : 'SAVE FAILED');
         }
-
         function resetSettings() {
-            Object.assign(USER_CONFIG, DEFAULT_CONFIG);
-            updateUIValues();
+            const keepPattern = cfg.pattern;
+            Object.assign(cfg, structuredClone(DEFAULT_CONFIG));
+            cfg.pattern = keepPattern;
+            onConfigChanged();
+            applyQuality();
             saveSettings();
-            showToast("RESET COMPLETE");
+            showToast('RESET COMPLETE');
         }
 
-        function showToast(msg) {
+        let toastTimer = 0;
+        function showToast(msg, ms = 2000) {
             const t = document.getElementById('toast');
             t.innerText = msg;
             t.style.opacity = 1;
-            setTimeout(() => t.style.opacity = 0, 2000);
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.style.opacity = 0, ms);
         }
 
-        const trackTitleEl = document.querySelector('.track-title');
+        // =====================================================================
+        // AUDIO ENGINE (纯 Web Audio，无依赖)
+        //
+        //   file:   BufferSource ─┬─> outGain(volume) ─> destination
+        //                         └─> inputGain ─> analyser ─> mute(0) ─> destination
+        //   mic/system: MediaStreamSource ─> inputGain ─> analyser ─> mute(0)
+        //   （直播输入不接扬声器，避免啸叫；mute 节点只是为了保证 analyser 被持续拉取）
+        // =====================================================================
+        const player = {
+            ctx: null, analyser: null, inputGain: null, outGain: null,
+            mode: 'none',            // 'file' | 'mic' | 'system' | 'none'
+            buffer: null, source: null, startedAt: 0, offset: 0,
+            stream: null, streamSrc: null,
+            playing: false,
 
-        function setTrackTitle(name) {
-            const cleaned = (name || 'UNKNOWN').replace(/\.[^/.]+$/, '');
-            trackTitleEl.innerText = cleaned;
-        }
+            init() {
+                if (this.ctx) return;
+                const Ctx = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new Ctx({ latencyHint: 'interactive' });
+                this.analyser = this.ctx.createAnalyser();
+                this.analyser.fftSize = 2048;
+                this.analyser.smoothingTimeConstant = 0.3;   // 低平滑 = kick 瞬态更清晰
+                this.analyser.minDecibels = -100;
+                this.analyser.maxDecibels = -20;
+                this.inputGain = this.ctx.createGain();
+                this.inputGain.gain.value = cfg.inputGain;
+                const mute = this.ctx.createGain();
+                mute.gain.value = 0;
+                this.inputGain.connect(this.analyser);
+                this.analyser.connect(mute);
+                mute.connect(this.ctx.destination);
+                this.outGain = this.ctx.createGain();
+                this.outGain.gain.value = cfg.volume;
+                this.outGain.connect(this.ctx.destination);
+                analysis.attach(this.analyser, this.ctx.sampleRate);
+            },
+            resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
 
-        function setTrackTitleFromUrl(url) {
-            const base = url ? url.split('/').pop() : '';
-            setTrackTitle(base || 'UNKNOWN');
-        }
+            get isLive() { return this.mode === 'mic' || this.mode === 'system'; },
+            get duration() { return this.mode === 'file' && this.buffer ? this.buffer.duration : 0; },
+            get currentTime() {
+                if (this.mode !== 'file' || !this.buffer) return 0;
+                if (!this.playing) return this.offset;
+                const d = this.buffer.duration;
+                return (((this.ctx.currentTime - this.startedAt) % d) + d) % d;
+            },
 
-        // --- UI Binding ---
-        const sBass = document.getElementById('s-bass');
-        const sHigh = document.getElementById('s-high');
-        const sDist = document.getElementById('s-dist');
-        const sGlow = document.getElementById('s-glow');
-        const sAttack = document.getElementById('s-attack');
-        const sRelease = document.getElementById('s-release');
-        
-        function updateUIValues() {
-            sBass.value = USER_CONFIG.bassGain; document.getElementById('v-bass').innerText = USER_CONFIG.bassGain.toFixed(1);
-            sHigh.value = USER_CONFIG.highGain; document.getElementById('v-high').innerText = USER_CONFIG.highGain.toFixed(1);
-            sDist.value = USER_CONFIG.distortion; document.getElementById('v-dist').innerText = USER_CONFIG.distortion.toFixed(1);
-            sGlow.value = USER_CONFIG.glow; document.getElementById('v-glow').innerText = USER_CONFIG.glow.toFixed(1);
-            sAttack.value = USER_CONFIG.attack; document.getElementById('v-attack').innerText = USER_CONFIG.attack.toFixed(1);
-            sRelease.value = USER_CONFIG.release; document.getElementById('v-release').innerText = USER_CONFIG.release.toFixed(1);
-            
-            // Sync Mode
-            patternIndex = USER_CONFIG.pattern;
-            document.getElementById('mode-display').innerText = patternNames[patternIndex];
-        }
+            async loadFile(arrayBuffer) {
+                this.init();
+                const buf = await this.ctx.decodeAudioData(arrayBuffer);
+                this.stopAll();
+                this.buffer = buf;
+                this.offset = 0;
+                this.mode = 'file';
+            },
 
-        // Listeners
-        sBass.oninput = (e) => { USER_CONFIG.bassGain = parseFloat(e.target.value); document.getElementById('v-bass').innerText = e.target.value; };
-        sHigh.oninput = (e) => { USER_CONFIG.highGain = parseFloat(e.target.value); document.getElementById('v-high').innerText = e.target.value; };
-        sDist.oninput = (e) => { USER_CONFIG.distortion = parseFloat(e.target.value); document.getElementById('v-dist').innerText = e.target.value; };
-        sGlow.oninput = (e) => { USER_CONFIG.glow = parseFloat(e.target.value); document.getElementById('v-glow').innerText = e.target.value; };
-        sAttack.oninput = (e) => { USER_CONFIG.attack = parseFloat(e.target.value); document.getElementById('v-attack').innerText = parseFloat(e.target.value).toFixed(1); };
-        sRelease.oninput = (e) => { USER_CONFIG.release = parseFloat(e.target.value); document.getElementById('v-release').innerText = parseFloat(e.target.value).toFixed(1); };
-        
-        document.getElementById('save-btn').onclick = saveSettings;
-        document.getElementById('reset-btn').onclick = resetSettings;
-        
-        document.getElementById('settings-toggle').onclick = () => {
-            document.getElementById('settings-panel').classList.toggle('open');
+            async startStream(kind) {
+                this.init();
+                let stream;
+                if (kind === 'mic') {
+                    // 关闭语音处理，否则音乐会被降噪/自动增益严重破坏
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                    });
+                } else {
+                    // Chrome 要求同时请求 video；拿到后立即停掉视频轨，只留音频
+                    stream = await navigator.mediaDevices.getDisplayMedia({
+                        video: true,
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+                        systemAudio: 'include',
+                    });
+                    stream.getVideoTracks().forEach(t => t.stop());
+                    if (stream.getAudioTracks().length === 0) {
+                        throw new Error('NO_AUDIO_TRACK');
+                    }
+                }
+                this.stopAll();
+                this.stream = stream;
+                this.streamSrc = this.ctx.createMediaStreamSource(stream);
+                this.mode = kind;
+                stream.getAudioTracks()[0].addEventListener('ended', () => {
+                    if (this.stream !== stream) return;
+                    this.stopAll();
+                    this.mode = 'none';
+                    onPlayerStateChanged();
+                    showToast('INPUT ENDED');
+                });
+                this.play();
+            },
+
+            play(at = this.offset) {
+                this.resume();
+                if (this.mode === 'file') {
+                    if (!this.buffer) return;
+                    this._stopSource();
+                    const d = this.buffer.duration;
+                    at = ((at % d) + d) % d;
+                    const src = this.ctx.createBufferSource();
+                    src.buffer = this.buffer;
+                    src.loop = true;
+                    src.connect(this.outGain);
+                    src.connect(this.inputGain);
+                    src.start(0, at);
+                    this.source = src;
+                    this.startedAt = this.ctx.currentTime - at;
+                    this.playing = true;
+                } else if (this.isLive && this.streamSrc) {
+                    if (!this.playing) this.streamSrc.connect(this.inputGain);
+                    this.playing = true;
+                }
+                onPlayerStateChanged();
+            },
+
+            pause() {
+                if (!this.playing) return;
+                if (this.mode === 'file') {
+                    this.offset = this.currentTime;
+                    this._stopSource();
+                } else if (this.streamSrc) {
+                    this.streamSrc.disconnect();
+                }
+                this.playing = false;
+                onPlayerStateChanged();
+            },
+
+            toggle() { this.playing ? this.pause() : this.play(); },
+
+            seek(t) {
+                if (this.mode !== 'file') return;
+                if (this.playing) this.play(t); else this.offset = t;
+            },
+
+            setVolume(v) { if (this.outGain) this.outGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); },
+            setInputGain(v) { if (this.inputGain) this.inputGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); },
+
+            stopAll() {
+                this._stopSource();
+                if (this.streamSrc) { this.streamSrc.disconnect(); this.streamSrc = null; }
+                if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+                this.playing = false;
+            },
+
+            _stopSource() {
+                if (!this.source) return;
+                try { this.source.stop(); } catch (e) { /* already stopped */ }
+                this.source.disconnect();
+                this.source = null;
+            },
         };
 
-        // --- Scene Setup ---
+        // =====================================================================
+        // ANALYSIS (频段能量 / kick 检测 / BPM / 频谱纹理)
+        // =====================================================================
+        const SPEC_TEX_SIZE = 64;
+        const HIST_LEN = 240;
+        const F_MIN = 20, F_MAX = 20000;
+
+        const analysis = {
+            analyser: null, freq: null, disp: null, binHz: 1, binCount: 0,
+            ranges: {},
+            specBins: [],
+            levels: { kick: 0, bass: 0, high: 0 },
+            kickAvg: 0, kickEnv: 0, lastKickT: -10, kickTimes: [], bpm: 0, kickCount: 0,
+            hist: new Float32Array(HIST_LEN), histKick: new Uint8Array(HIST_LEN), histIdx: 0, histFilled: 0,
+
+            attach(analyser, sampleRate) {
+                this.analyser = analyser;
+                this.binCount = analyser.frequencyBinCount;
+                this.binHz = sampleRate / analyser.fftSize;
+                this.freq = new Uint8Array(this.binCount);
+                this.disp = new Float32Array(this.binCount);
+                this.computeRanges();
+            },
+
+            fToBin(f) { return Math.max(1, Math.min(this.binCount - 1, Math.round(f / this.binHz))); },
+
+            computeRanges() {
+                if (!this.analyser) return;
+                for (const k of BAND_KEYS) {
+                    const b = cfg.bands[k];
+                    const i0 = this.fToBin(b.lo);
+                    this.ranges[k] = [i0, Math.max(i0, this.fToBin(b.hi))];
+                }
+                // 对数分布的 64 段频谱，给 EQ SPHERE 用
+                this.specBins = [];
+                const lo = 30, hi = 16000;
+                for (let i = 0; i < SPEC_TEX_SIZE; i++) {
+                    const f0 = lo * Math.pow(hi / lo, i / SPEC_TEX_SIZE);
+                    const f1 = lo * Math.pow(hi / lo, (i + 1) / SPEC_TEX_SIZE);
+                    const i0 = this.fToBin(f0);
+                    this.specBins.push([i0, Math.max(i0, this.fToBin(f1))]);
+                }
+            },
+
+            bandLevel(k) {
+                const [i0, i1] = this.ranges[k];
+                let s = 0;
+                for (let i = i0; i <= i1; i++) s += this.freq[i];
+                return s / ((i1 - i0 + 1) * 255);
+            },
+
+            update(dt, time) {
+                this.analyser.getByteFrequencyData(this.freq);
+
+                for (const k of BAND_KEYS) this.levels[k] = this.bandLevel(k);
+
+                // --- Kick：超过触发线 + 相对近期均值有明显上升 + 不在保持时间内 ---
+                const kb = cfg.bands.kick;
+                const lv = this.levels.kick;
+                let fired = 0;
+                if (lv > kb.thr && lv - this.kickAvg > cfg.kickOnset && time - this.lastKickT > cfg.kickHold / 1000) {
+                    this.fireKick(time);
+                    fired = 1;
+                }
+                this.kickAvg += (lv - this.kickAvg) * (1 - Math.exp(-dt / 0.12));
+                this.kickEnv *= Math.exp(-dt * cfg.kickDecay);
+
+                this.hist[this.histIdx] = lv;
+                this.histKick[this.histIdx] = fired;
+                this.histIdx = (this.histIdx + 1) % HIST_LEN;
+                this.histFilled = Math.min(HIST_LEN, this.histFilled + 1);
+
+                // 显示用频谱：快速上升、缓慢下落
+                const fall = dt * 1.2;
+                for (let i = 0; i < this.binCount; i++) {
+                    const v = this.freq[i] / 255;
+                    this.disp[i] = v > this.disp[i] ? v : Math.max(v, this.disp[i] - fall);
+                }
+
+                const tex = specTex.image.data;
+                for (let i = 0; i < SPEC_TEX_SIZE; i++) {
+                    const [i0, i1] = this.specBins[i];
+                    let m = 0;
+                    for (let j = i0; j <= i1; j++) if (this.freq[j] > m) m = this.freq[j];
+                    tex[i] = m;
+                }
+                specTex.needsUpdate = true;
+            },
+
+            idle(dt) {
+                this.kickEnv *= Math.exp(-dt * cfg.kickDecay);
+                const k = Math.exp(-dt * 3);
+                for (const b of BAND_KEYS) this.levels[b] *= k;
+                if (this.disp) for (let i = 0; i < this.binCount; i++) this.disp[i] *= k;
+            },
+
+            gated(k) {
+                const thr = cfg.bands[k].thr;
+                return Math.max(0, this.levels[k] - thr) / Math.max(0.02, 1 - thr);
+            },
+
+            fireKick(time) {
+                const ioi = time - this.lastKickT;
+                this.lastKickT = time;
+                this.kickEnv = 1;
+                this.kickCount++;
+                if (ioi > 0.25 && ioi < 2) {
+                    this.kickTimes.push(ioi);
+                    if (this.kickTimes.length > 12) this.kickTimes.shift();
+                    if (this.kickTimes.length >= 4) {
+                        const sorted = [...this.kickTimes].sort((a, b) => a - b);
+                        let bpm = 60 / sorted[sorted.length >> 1];
+                        while (bpm < 70) bpm *= 2;
+                        while (bpm > 180) bpm /= 2;
+                        this.bpm = bpm;
+                    }
+                }
+                onKick();
+            },
+
+            // 取最近几秒 kick 频段能量的分位数，把阈值放在“中位数”和“峰值”之间
+            autoThreshold() {
+                if (this.histFilled < 120) return null;
+                const arr = Array.from(this.hist.subarray(0, this.histFilled)).sort((a, b) => a - b);
+                const p50 = arr[Math.floor(arr.length * 0.5)];
+                const p95 = arr[Math.floor(arr.length * 0.95)];
+                if (p95 - p50 < 0.02) return null;
+                return Math.min(0.97, p50 + (p95 - p50) * 0.55);
+            },
+        };
+
+        // =====================================================================
+        // SCENE
+        // =====================================================================
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x000000, 0.02);
-        
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        const BASE_FOV = 75;
+        const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 7.5;
 
-        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         document.body.appendChild(renderer.domElement);
 
@@ -352,161 +682,202 @@
         controls.autoRotate = true;
         controls.autoRotateSpeed = 0.5;
 
-        // --- SHADER V10 (Smart Gate & Params) ---
+        const specTex = new THREE.DataTexture(new Uint8Array(SPEC_TEX_SIZE), SPEC_TEX_SIZE, 1, THREE.RedFormat, THREE.UnsignedByteType);
+        specTex.magFilter = THREE.LinearFilter;
+        specTex.minFilter = THREE.LinearFilter;
+        specTex.needsUpdate = true;
+
+        // --- SHADER V11 ---
+        // 只计算当前 pattern（切换时再加一个做交叉淡化），而不是每个顶点算全部 pattern
         const vertexShader = `
             uniform float uTime;
-            uniform float uBass; 
-            uniform float uKick; 
+            uniform float uBass;
+            uniform float uKick;
             uniform float uHigh;
-            uniform float uPattern;
             uniform float uIntensity;
-            
-            // Manual Controls
-            uniform float uDistAmount; 
-            
-            varying vec2 vUv;
-            varying float vDisp;
-            varying vec3 vNorm;
-            varying float vKick;
-            varying float vHigh;
+            uniform float uDistAmount;
+            uniform float uPatA;
+            uniform float uPatB;
+            uniform float uMix;
+            uniform float uKickAge;
+            uniform float uSeed;
+            uniform float uSeedStep;
+            uniform sampler2D uSpec;
 
-            // Simplex Noise (Standard)
+            varying vec3 vViewPos;
+            varying vec3 vObjNorm;
+            varying float vDisp;
+
             vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
             vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
             vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
             vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
             float snoise(vec3 v) {
-                const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+                const vec2  C = vec2(1.0/6.0, 1.0/3.0);
                 const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
-                vec3 i  = floor(v + dot(v, C.yyy) );
-                vec3 x0 = v - i + dot(i, C.xxx) ;
+                vec3 i  = floor(v + dot(v, C.yyy));
+                vec3 x0 = v - i + dot(i, C.xxx);
                 vec3 g = step(x0.yzx, x0.xyz);
                 vec3 l = 1.0 - g;
-                vec3 i1 = min( g.xyz, l.zxy );
-                vec3 i2 = max( g.xyz, l.zxy );
+                vec3 i1 = min(g.xyz, l.zxy);
+                vec3 i2 = max(g.xyz, l.zxy);
                 vec3 x1 = x0 - i1 + C.xxx;
                 vec3 x2 = x0 - i2 + C.yyy;
                 vec3 x3 = x0 - D.yyy;
                 i = mod289(i);
-                vec4 p = permute( permute( permute(
-                            i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
-                        + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
-                        + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+                vec4 p = permute(permute(permute(
+                            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                        + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                        + i.x + vec4(0.0, i1.x, i2.x, 1.0));
                 float n_ = 0.142857142857;
                 vec3  ns = n_ * D.wyz - D.xzx;
                 vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
                 vec4 x_ = floor(j * ns.z);
-                vec4 y_ = floor(j - 7.0 * x_ );
-                vec4 x = x_ *ns.x + ns.yyyy;
-                vec4 y = y_ *ns.x + ns.yyyy;
+                vec4 y_ = floor(j - 7.0 * x_);
+                vec4 x = x_ * ns.x + ns.yyyy;
+                vec4 y = y_ * ns.x + ns.yyyy;
                 vec4 h = 1.0 - abs(x) - abs(y);
-                vec4 b0 = vec4( x.xy, y.xy );
-                vec4 b1 = vec4( x.zw, y.zw );
+                vec4 b0 = vec4(x.xy, y.xy);
+                vec4 b1 = vec4(x.zw, y.zw);
                 vec4 s0 = floor(b0)*2.0 + 1.0;
                 vec4 s1 = floor(b1)*2.0 + 1.0;
                 vec4 sh = -step(h, vec4(0.0));
-                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
-                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
-                vec3 p0 = vec3(a0.xy,h.x);
-                vec3 p1 = vec3(a0.zw,h.y);
-                vec3 p2 = vec3(a1.xy,h.z);
-                vec3 p3 = vec3(a1.zw,h.w);
-                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
-                p0 *= norm.x;
-                p1 *= norm.y;
-                p2 *= norm.z;
-                p3 *= norm.w;
+                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+                vec3 p0 = vec3(a0.xy, h.x);
+                vec3 p1 = vec3(a0.zw, h.y);
+                vec3 p2 = vec3(a1.xy, h.z);
+                vec3 p3 = vec3(a1.zw, h.w);
+                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+                p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
                 vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
                 m = m * m;
-                return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
-                                            dot(p2,x2), dot(p3,x3) ) );
+                return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+            }
+
+            float hash13(vec3 p) {
+                p = fract(p * 0.1031);
+                p += dot(p, p.zyx + 31.32);
+                return fract((p.x + p.y) * p.z);
+            }
+
+            float fbm(vec3 p) {
+                float a = 0.5, s = 0.0;
+                for (int i = 0; i < 4; i++) { s += a * snoise(p); p *= 2.03; a *= 0.5; }
+                return s;
+            }
+
+            float harm(vec3 n, float s) {
+                float th = acos(clamp(n.y, -1.0, 1.0));
+                float ph = atan(n.z, n.x);
+                float m = 2.0 + mod(s * 3.0, 5.0);
+                float l = m + 1.0 + mod(s * 7.0, 4.0);
+                return sin(l * th) * cos(m * ph + uTime * 0.6);
+            }
+
+            float pattern(float id, vec3 p, vec3 n, float bass) {
+                if (id < 0.5) {            // LIQUID
+                    return snoise(p * 0.8 + uTime * 0.8) * (0.3 + bass * 1.5);
+                } else if (id < 1.5) {     // SPIKES
+                    return abs(snoise(p * 3.0 + uTime * 0.5)) * (0.2 + bass * 3.0);
+                } else if (id < 2.5) {     // PULSE
+                    return sin(p.y * 10.0 - uTime * 6.0) * cos(p.x * 5.0) * (0.2 + bass * 2.0);
+                } else if (id < 3.5) {     // RIPPLE：每个 kick 从顶部发射一圈波
+                    float d = acos(clamp(n.y, -1.0, 1.0));
+                    float front = uKickAge * 5.0;
+                    float ring = exp(-pow((d - front) * 4.0, 2.0)) * exp(-uKickAge * 1.2);
+                    float waves = sin(d * 14.0 - uTime * 4.0);
+                    return ring * (0.5 + bass * 1.5) + waves * (0.04 + bass * 0.25);
+                } else if (id < 4.5) {     // VOXEL：量化后的块状噪声
+                    vec3 q = floor(p * 2.2) / 2.2;
+                    float r = snoise(q * 0.9 + vec3(0.0, uTime * 0.35, 0.0));
+                    return (r * 0.5 + 0.5) * (0.15 + bass * 2.4);
+                } else if (id < 5.5) {     // VORTEX：扭转的叶片
+                    float ang = atan(n.z, n.x);
+                    float tw = n.y * (4.0 + 2.0 * sin(uTime * 0.4));
+                    float v = 0.5 + 0.5 * sin(ang * 5.0 + tw * 3.0 - uTime * 3.0);
+                    return pow(v, 4.0) * (0.15 + bass * 2.2);
+                } else if (id < 6.5) {     // ORGANIC：多层分形噪声
+                    return fbm(p * 0.9 + vec3(0.0, -uTime * 0.5, uTime * 0.2)) * (0.45 + bass * 2.4);
+                } else if (id < 7.5) {     // EQ SPHERE：赤道=低频，两极=高频
+                    float lat = floor(abs(n.y) * 28.0) / 28.0;
+                    float s = texture2D(uSpec, vec2(0.01 + lat * 0.98, 0.5)).r;
+                    float lon = 0.85 + 0.15 * sin(atan(n.z, n.x) * 8.0 + uTime * 2.0);
+                    return s * s * 1.8 * lon * (0.4 + uDistAmount * 0.5) * uIntensity - 0.1;
+                } else if (id < 8.5) {     // GLITCH：随机碎块，高频越强越多
+                    vec3 cell = floor(n * 5.0);
+                    float h = hash13(cell + uSeedStep * 7.13 + floor(uTime * 6.0));
+                    float on = step(0.78 - uHigh * uIntensity * 0.5, h);
+                    return on * (h - 0.4) * (0.6 + bass * 2.5) + sin(n.y * 40.0 + uTime * 10.0) * 0.02;
+                } else {                   // HARMONIC：球谐波瓣，每个 kick 变形
+                    float sf = floor(uSeed);
+                    float fr = smoothstep(0.0, 1.0, fract(uSeed));
+                    return mix(harm(n, sf), harm(n, sf + 1.0), fr) * (0.25 + bass * 2.0);
+                }
             }
 
             void main() {
-                vUv = uv;
-                vNorm = normal;
-                vKick = uKick * uIntensity;
-                vHigh = uHigh * uIntensity;
+                vec3 n = normalize(position);
+                vObjNorm = n;
+                float bass = uBass * uIntensity * uDistAmount;
 
-                // Scale inputs by intensity & User Distortion param
-                float activeBass = uBass * uIntensity * uDistAmount;
-                
-                // Patterns
-                float liquid = snoise(position * 0.8 + uTime * 0.8); 
-                float d1 = liquid * (0.3 + activeBass * 1.5); 
+                float d = pattern(uPatA, position, n, bass);
+                if (uMix > 0.001) d = mix(d, pattern(uPatB, position, n, bass), uMix);
 
-                float spikeNoise = abs(snoise(position * 3.0 + uTime * 0.5));
-                float d2 = spikeNoise * (0.2 + activeBass * 3.0); 
+                float boom = 0.0;
+                if (uKick > 0.002) {
+                    float boomNoise = snoise(position * 8.0 + uTime * 20.0);
+                    boom = uKick * uIntensity * (0.5 + boomNoise * 0.3) * uDistAmount;
+                }
 
-                float pulseWave = sin(position.y * 10.0 - uTime * 6.0) * cos(position.x * 5.0);
-                float d3 = pulseWave * (0.2 + activeBass * 2.0); 
+                float jitter = 0.0;
+                if (uHigh > 0.002) jitter = snoise(position * 25.0 + uTime * 20.0) * uHigh * uIntensity * 0.2;
 
-                float finalDisp = 0.0;
-                float p = clamp(uPattern, 0.0, 2.0);
-                if (p < 1.0) finalDisp = mix(d1, d2, p);
-                else finalDisp = mix(d2, d3, p - 1.0);
-
-                // Kick Explosion
-                float boomNoise = snoise(position * 8.0 + uTime * 20.0); 
-                float kickExplosion = (uKick * uIntensity) * (0.5 + boomNoise * 0.3) * uDistAmount;
-                
-                // Jitter (Static) - Reduced by default, boosted by uHigh
-                float jitter = snoise(position * 25.0 + uTime * 20.0) * vHigh * 0.2;
-
-                vDisp = finalDisp + kickExplosion;
-                
-                vec3 newPos = position + normal * (finalDisp + kickExplosion + jitter);
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPos, 1.0);
+                vDisp = d + boom;
+                vec4 mv = modelViewMatrix * vec4(position + n * (d + boom + jitter), 1.0);
+                vViewPos = mv.xyz;
+                gl_Position = projectionMatrix * mv;
             }
         `;
 
         const fragmentShader = `
             uniform float uBass;
             uniform float uHigh;
+            uniform float uKick;
+            uniform float uIntensity;
             uniform vec3 uColorA;
             uniform vec3 uColorB;
-            uniform float uIntensity;
-            
+
+            varying vec3 vViewPos;
+            varying vec3 vObjNorm;
             varying float vDisp;
-            varying vec3 vNorm;
-            varying float vKick;
-            varying float vHigh;
 
             void main() {
-                vec3 color = vec3(0.0);
-                
+                // 由屏幕空间导数得到形变后的真实法线，菲涅尔/明暗随视角正确变化
+                vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
+                vec3 v = normalize(-vViewPos);
+                if (dot(n, v) < 0.0) n = -n;
+                float fresnel = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
+                float diff = max(dot(n, normalize(vec3(-0.4, 0.6, 0.7))), 0.0);
+
+                float high = uHigh * uIntensity;
                 float t = smoothstep(-0.5, 1.5, vDisp);
                 vec3 baseC = mix(uColorA, uColorB, t);
-                
-                // Bass Breath
-                color += baseC * (0.2 + uBass * 0.4) * uIntensity; 
-                
-                // High Freq Flash - Using squared high to create a "Gate" effect
-                // Only strong highs will create significant brightness
-                float gatedHigh = pow(vHigh, 2.0); 
-                color += baseC * gatedHigh * 2.0;
 
-                // Rim
-                float fresnel = pow(1.0 - abs(dot(vNorm, vec3(0.0,0.0,1.0))), 3.0);
-                color += uColorB * fresnel * 0.5 * uIntensity;
+                vec3 color = baseC * (0.2 + uBass * 0.4) * uIntensity * (0.55 + 0.9 * diff);
+                color += baseC * high * high * 2.0;
+                color += uColorB * fresnel * (0.1 + 0.5 * uIntensity);
 
-                // Wireframe - Only appear on clean highs
-                float grid = abs(sin(vNorm.x * 60.0) * sin(vNorm.y * 60.0));
-                // Applying gate to grid so it doesn't look noisy constantly
-                float gridVis = smoothstep(0.2, 1.0, vHigh); 
-                color += vec3(grid) * gridVis * 1.5 * uIntensity;
-                
-                // Kick Flash
-                color += vec3(1.0, 1.0, 1.0) * vKick * 0.7;
-                
-                // Idle
-                color += uColorB * fresnel * 0.1; 
+                float grid = abs(sin(vObjNorm.x * 60.0) * sin(vObjNorm.y * 60.0));
+                color += vec3(grid) * smoothstep(0.2, 1.0, high) * 1.5 * uIntensity;
+
+                color += vec3(1.0) * uKick * uIntensity * 0.7;
 
                 gl_FragColor = vec4(color, 1.0);
             }
         `;
 
-        const coreGeo = new THREE.IcosahedronGeometry(2.0, 120); 
+        const startPattern = PATTERNS[cfg.pattern] || PATTERNS[1];
         const coreMat = new THREE.ShaderMaterial({
             vertexShader,
             fragmentShader,
@@ -515,14 +886,32 @@
                 uBass: { value: 0 },
                 uKick: { value: 0 },
                 uHigh: { value: 0 },
-                uPattern: { value: USER_CONFIG.pattern },
                 uIntensity: { value: 1.0 },
-                uDistAmount: { value: USER_CONFIG.distortion },
-                uColorA: { value: new THREE.Color(patternColors[1].a) },
-                uColorB: { value: new THREE.Color(patternColors[1].b) }
+                uDistAmount: { value: cfg.distortion },
+                uPatA: { value: cfg.pattern },
+                uPatB: { value: cfg.pattern },
+                uMix: { value: 0 },
+                uKickAge: { value: 10 },
+                uSeed: { value: 0 },
+                uSeedStep: { value: 0 },
+                uSpec: { value: specTex },
+                uColorA: { value: startPattern.ca.clone() },
+                uColorB: { value: startPattern.cb.clone() },
             }
         });
-        const core = new THREE.Mesh(coreGeo, coreMat);
+
+        // 合并共享顶点：原来非索引几何体每个顶点被重复计算约 6 次，合并后顶点着色器开销大幅下降
+        function buildCoreGeometry(detail) {
+            const g = new THREE.IcosahedronGeometry(2.0, detail);
+            g.deleteAttribute('uv');
+            g.deleteAttribute('normal');
+            const merged = mergeVertices(g, 1e-4);
+            g.dispose();
+            return merged;
+        }
+
+        const core = new THREE.Mesh(new THREE.BufferGeometry(), coreMat);
+        core.frustumCulled = false;
         scene.add(core);
 
         const inner = new THREE.Mesh(
@@ -532,295 +921,696 @@
         scene.add(inner);
 
         // --- Particles ---
+        const P_COUNT = 4000;
         const pGeo = new THREE.BufferGeometry();
-        const pPos = new Float32Array(4000 * 3);
-        for(let i=0; i<4000*3; i++) {
-            pPos[i] = (Math.random() - 0.5) * 25;
-        }
+        const pPos = new Float32Array(P_COUNT * 3);
+        for (let i = 0; i < P_COUNT * 3; i++) pPos[i] = (Math.random() - 0.5) * 25;
         pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
         const pMat = new THREE.PointsMaterial({
             color: 0x555555, size: 0.05, transparent: true, opacity: 0.4,
-            blending: THREE.AdditiveBlending
+            blending: THREE.AdditiveBlending, depthWrite: false
         });
         const particles = new THREE.Points(pGeo, pMat);
         scene.add(particles);
 
+        // --- Kick shockwave rings ---
+        const RING_LIFE = 0.7;
+        const ringGeo = new THREE.RingGeometry(0.97, 1.0, 128);
+        const rings = [];
+        for (let i = 0; i < 4; i++) {
+            const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+                color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+                depthWrite: false, side: THREE.DoubleSide
+            }));
+            m.visible = false;
+            m.userData.age = RING_LIFE;
+            scene.add(m);
+            rings.push(m);
+        }
+        let ringCursor = 0;
+        function spawnRing() {
+            if (cfg.kickPower <= 0) return;
+            const r = rings[ringCursor];
+            ringCursor = (ringCursor + 1) % rings.length;
+            r.userData.age = 0;
+            r.visible = true;
+        }
+
         // --- Post Process ---
         const composer = new EffectComposer(renderer);
         composer.addPass(new RenderPass(scene, camera));
-        
         const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
         composer.addPass(bloom);
-
         const rgb = new ShaderPass(RGBShiftShader);
         rgb.uniforms['amount'].value = 0.002;
         composer.addPass(rgb);
 
-        // --- Init Audio ---
-        async function initAudio() {
-            const listener = new THREE.AudioListener();
-            camera.add(listener);
-            sound = new THREE.Audio(listener);
-            const loader = new THREE.AudioLoader();
+        let currentQuality = null;
+        function applyQuality() {
+            const q = QUALITY[cfg.quality];
+            if (currentQuality !== cfg.quality) {
+                const old = core.geometry;
+                core.geometry = buildCoreGeometry(q.detail);
+                old.dispose();
+                currentQuality = cfg.quality;
+            }
+            const pr = Math.min(window.devicePixelRatio, q.pixelRatio);
+            renderer.setPixelRatio(pr);
+            composer.setPixelRatio(pr);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
 
-            try {
-                const buffer = await loader.loadAsync(DEFAULT_AUDIO_URL);
-                sound.setBuffer(buffer);
-                sound.setLoop(true);
-                sound.setVolume(0.8);
-                analyser = new THREE.AudioAnalyser(sound, 1024);
-                progressOffset = 0;
-                progressStart = sound.context.currentTime;
-                setTrackTitleFromUrl(DEFAULT_AUDIO_URL);
-                return true;
-            } catch (e) {
-                console.error(e);
-                document.getElementById('error-modal').style.display = 'block';
-                return false;
+        // =====================================================================
+        // UI
+        // =====================================================================
+        const $ = (id) => document.getElementById(id);
+        const overlay = $('overlay');
+        const hud = $('hud');
+        const playBtn = $('play-btn');
+        const timeDisplay = $('time-display');
+        const progressBar = $('progress-bar');
+        const progressContainer = $('progress-container');
+        const modeDisplay = $('mode-display');
+        const autoBtn = $('auto-btn');
+        const settingsPanel = $('settings-panel');
+        const trackTitleEl = document.querySelector('.track-title');
+        const qualitySelect = $('quality-select');
+
+        function setTrackTitle(name) {
+            trackTitleEl.innerText = (name || 'UNKNOWN').replace(/\.[^/.]+$/, '');
+        }
+
+        // --- 滑块由配置表生成 ---
+        const sliderEls = {};
+        const slidersRoot = $('sliders');
+        for (const s of SLIDERS) {
+            const row = document.createElement('div');
+            row.className = 'setting-row';
+            row.innerHTML = `<span class="setting-label">${s.label}</span>
+                <input type="range" class="setting-slider" min="${s.min}" max="${s.max}" step="${s.step}">
+                <span class="setting-val"></span>`;
+            const input = row.querySelector('input');
+            const val = row.querySelector('.setting-val');
+            input.addEventListener('input', () => {
+                cfg[s.key] = parseFloat(input.value);
+                val.innerText = cfg[s.key].toFixed(s.digits ?? 1);
+                onConfigChanged(s.key);
+                scheduleSave();
+            });
+            sliderEls[s.key] = { input, val, spec: s };
+            slidersRoot.appendChild(row);
+        }
+
+        function updateUIValues() {
+            for (const k in sliderEls) {
+                const { input, val, spec } = sliderEls[k];
+                input.value = cfg[k];
+                val.innerText = Number(cfg[k]).toFixed(spec.digits ?? 1);
+            }
+            qualitySelect.value = cfg.quality;
+            modeDisplay.innerText = PATTERNS[pat.current].name;
+            autoBtn.classList.toggle('on', cfg.autoCycle);
+            updateBandChips();
+        }
+
+        function onConfigChanged(key) {
+            if (!key || key === 'volume') player.setVolume(cfg.volume);
+            if (!key || key === 'inputGain') player.setInputGain(cfg.inputGain);
+            if (!key) {
+                analysis.computeRanges();
+                setMode(cfg.pattern, true);
+                updateUIValues();
             }
         }
 
-        // --- Main Logic ---
-        loadSettings(); // Load config on startup
-        
-        // 移除了这里重新声明 patternIndex 的代码，因为它现在是一个全局变量
+        qualitySelect.onchange = () => { cfg.quality = qualitySelect.value; applyQuality(); scheduleSave(); };
+        $('save-btn').onclick = saveSettings;
+        $('reset-btn').onclick = resetSettings;
+        $('settings-toggle').onclick = toggleSettings;
+        function toggleSettings() {
+            const open = settingsPanel.classList.toggle('open');
+            $('settings-toggle').innerText = open ? 'PARAMS ▲' : 'PARAMS ▼';
+        }
 
-        // UI Handlers
-        const startBtn = document.getElementById('start-btn');
-        const overlay = document.getElementById('overlay');
-        const hud = document.getElementById('hud');
-        const playBtn = document.getElementById('play-btn');
-        const timeDisplay = document.getElementById('time-display');
-        const progressBar = document.getElementById('progress-bar');
-        const progressContainer = document.getElementById('progress-container');
-        const modeDisplay = document.getElementById('mode-display');
-        const btnPrev = document.getElementById('prev-mode');
-        const btnNext = document.getElementById('next-mode');
-        const uploadBtn = document.getElementById('upload-btn');
+        // --- Band chips ---
+        let activeBand = 'kick';
+        const bandRow = $('band-row');
+        const bandChips = {};
+        for (const k of BAND_KEYS) {
+            const c = document.createElement('span');
+            c.className = 'band-chip';
+            c.style.color = BAND_META[k].color;
+            c.onclick = () => { activeBand = k; updateBandChips(); };
+            bandRow.appendChild(c);
+            bandChips[k] = c;
+        }
+        function fmtHz(f) { return f >= 1000 ? (f / 1000).toFixed(f >= 10000 ? 0 : 1) + 'k' : Math.round(f) + ''; }
+        function updateBandChips() {
+            for (const k of BAND_KEYS) {
+                const b = cfg.bands[k], m = BAND_META[k];
+                bandChips[k].innerHTML = `<b>${m.label}</b> ${fmtHz(b.lo)}–${fmtHz(b.hi)}Hz · ${m.line} ${b.thr.toFixed(2)}`;
+                bandChips[k].classList.toggle('active', k === activeBand);
+            }
+        }
+        function onBandsChanged() {
+            analysis.computeRanges();
+            updateBandChips();
+            scheduleSave();
+        }
 
-        // Hidden input reused for uploads
+        $('auto-kick-btn').onclick = () => {
+            const thr = analysis.autoThreshold();
+            if (thr === null) { showToast('先播放几秒有鼓点的音乐再试'); return; }
+            cfg.bands.kick.thr = thr;
+            onBandsChanged();
+            showToast('KICK THRESHOLD = ' + thr.toFixed(2));
+        };
+
+        // --- Pattern 切换（交叉淡化） ---
+        const pat = { a: cfg.pattern, b: cfg.pattern, mix: 0, current: cfg.pattern, lastSwitchT: 0, kicksSince: 0 };
+        function setMode(idx, instant = false) {
+            const N = PATTERNS.length;
+            idx = ((idx % N) + N) % N;
+            if (instant) {
+                pat.a = pat.b = pat.current = idx;
+                pat.mix = 0;
+            } else if (idx !== pat.current) {
+                pat.a = pat.mix > 0.5 ? pat.b : pat.a;
+                pat.b = idx;
+                pat.mix = 0;
+                pat.current = idx;
+            }
+            pat.kicksSince = 0;
+            pat.lastSwitchT = clock.elapsedTime;
+            cfg.pattern = idx;
+            modeDisplay.innerText = PATTERNS[idx].name;
+            scheduleSave();
+        }
+        function randomNextPattern() {
+            let n = pat.current;
+            while (n === pat.current) n = Math.floor(Math.random() * PATTERNS.length);
+            setMode(n);
+        }
+        $('prev-mode').onclick = () => setMode(pat.current - 1);
+        $('next-mode').onclick = () => setMode(pat.current + 1);
+        function toggleAuto() {
+            cfg.autoCycle = !cfg.autoCycle;
+            autoBtn.classList.toggle('on', cfg.autoCycle);
+            pat.kicksSince = 0;
+            pat.lastSwitchT = clock.elapsedTime;
+            showToast(cfg.autoCycle ? `AUTO CYCLE: 每 ${cfg.cycleKicks} 个 KICK` : 'AUTO CYCLE OFF');
+            scheduleSave();
+        }
+        autoBtn.onclick = toggleAuto;
+
+        // --- kick 事件 ---
+        let seedTarget = 0;
+        const kickLed = $('kick-led');
+        function onKick() {
+            spawnRing();
+            seedTarget += 1;
+            coreMat.uniforms.uSeedStep.value = seedTarget;
+            if (cfg.autoCycle && ++pat.kicksSince >= cfg.cycleKicks) randomNextPattern();
+        }
+
+        // --- 播放状态 ---
+        function onPlayerStateChanged() {
+            playBtn.innerText = player.playing ? 'II' : '▶';
+            const live = player.isLive;
+            progressContainer.classList.toggle('live', live);
+            if (live) {
+                setTrackTitle(player.mode === 'mic' ? 'MIC INPUT' : 'SYSTEM AUDIO');
+                timeDisplay.innerText = player.playing ? '● LIVE' : 'LIVE (PAUSED)';
+            }
+            document.querySelectorAll('#source-pill [data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === player.mode));
+        }
+
+        function showHud() {
+            overlay.style.opacity = 0;
+            setTimeout(() => overlay.style.display = 'none', 500);
+            hud.classList.add('active');
+            $('error-modal').style.display = 'none';
+        }
+
+        // --- 文件 / 麦克风 / 系统音频 ---
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
-        fileInput.accept = 'audio/*';
+        fileInput.accept = 'audio/*,video/*';
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
-
-        function beginPlayback(fromOffset = 0) {
-            if(!sound || !sound.buffer) return;
-            const duration = sound.buffer.duration;
-            progressOffset = ((fromOffset % duration) + duration) % duration;
-            sound.offset = progressOffset;
-            sound.play();
-            progressStart = sound.context.currentTime;
-            isPlaying = true;
-            playBtn.innerText = 'II';
-        }
-
-        function pausePlayback() {
-            if(!sound || !sound.buffer) return;
-            const elapsed = (sound.context.currentTime - progressStart) * sound.playbackRate;
-            progressOffset = (progressOffset + Math.max(0, elapsed)) % sound.buffer.duration;
-            sound.pause();
-            isPlaying = false;
-            playBtn.innerText = '▶';
-        }
-
-        startBtn.onclick = async () => {
-            startBtn.innerText = "LOADING...";
-            if(await initAudio()) {
-                beginPlayback(0);
-                overlay.style.opacity = 0;
-                setTimeout(()=>overlay.style.display='none', 500);
-                hud.classList.add('active');
-            }
-        };
-
-        playBtn.onclick = () => {
-            if(!sound || !sound.buffer) return;
-            if(isPlaying) pausePlayback();
-            else beginPlayback(progressOffset);
-        };
-
-        async function handleFileUpload(e) {
-            if(!e.target.files[0]) return;
-            const file = e.target.files[0];
-            const url = URL.createObjectURL(file);
-            setTrackTitle(file.name);
-            const loader = new THREE.AudioLoader();
-            const buf = await loader.loadAsync(url);
-            
-            if(sound) sound.stop();
-            const listener = new THREE.AudioListener();
-            camera.add(listener);
-            sound = new THREE.Audio(listener);
-            sound.setBuffer(buf);
-            sound.setLoop(true);
-            analyser = new THREE.AudioAnalyser(sound, 1024);
-            document.getElementById('error-modal').style.display='none';
-            
-            progressOffset = 0;
-            progressStart = sound.context.currentTime;
-            beginPlayback(0);
-            overlay.style.display='none'; hud.classList.add('active');
-            
-            // reset input so same file can be reselected later
+        fileInput.onchange = (e) => {
+            const f = e.target.files[0];
             e.target.value = '';
-        }
+            if (f) loadFile(f);
+        };
 
-        function setMode(idx) {
-            patternIndex = idx;
-            if(patternIndex < 0) patternIndex = 2;
-            if(patternIndex > 2) patternIndex = 0;
-            USER_CONFIG.pattern = patternIndex; // Update config
-            modeDisplay.innerText = patternNames[patternIndex];
-        }
-        btnPrev.onclick = () => setMode(patternIndex - 1);
-        btnNext.onclick = () => setMode(patternIndex + 1);
-
-        progressContainer.onclick = (e) => {
-            if(!sound || !sound.buffer) return;
-            const rect = progressContainer.getBoundingClientRect();
-            const pct = (e.clientX - rect.left) / rect.width;
-            const newOffset = pct * sound.buffer.duration;
-            if(isPlaying) {
-                sound.stop();
-                beginPlayback(newOffset);
-            } else {
-                progressOffset = newOffset;
-                sound.offset = progressOffset;
-                progressBar.style.width = (pct * 100) + '%';
-                timeDisplay.innerText = `${fmtTime(progressOffset)} / ${fmtTime(sound.buffer.duration)}`;
+        async function loadFile(file) {
+            showToast('DECODING...', 10000);
+            try {
+                await player.loadFile(await file.arrayBuffer());
+                setTrackTitle(file.name);
+                player.play(0);
+                showHud();
+                showToast(player.ctx.state === 'suspended' ? '点击任意处开始播放' : 'LOADED');
+            } catch (e) {
+                console.error(e);
+                showToast('无法解码该文件');
             }
-        };
-
-        document.getElementById('fallback-btn').onclick = () => {
-            fileInput.onchange = handleFileUpload;
-            fileInput.click();
         }
 
-        uploadBtn.onclick = () => {
-            fileInput.onchange = handleFileUpload;
-            fileInput.click();
-        };
+        async function loadDefault() {
+            try {
+                const res = await fetch(DEFAULT_AUDIO_URL);
+                if (!res.ok) throw new Error(res.status);
+                await player.loadFile(await res.arrayBuffer());
+                setTrackTitle(DEFAULT_AUDIO_URL);
+                player.play(0);
+                showHud();
+            } catch (e) {
+                console.error(e);
+                $('error-modal').style.display = 'block';
+            }
+        }
 
-        // --- Loop ---
-        const clock = new THREE.Clock();
-        let kickImpulse = 0;
-        let lastLowAvg = 0;
-        let currentIntensity = 1.0;
+        async function startLive(kind) {
+            if (!navigator.mediaDevices || (kind === 'mic' ? !navigator.mediaDevices.getUserMedia : !navigator.mediaDevices.getDisplayMedia)) {
+                showToast('当前浏览器/环境不支持（需 https、localhost 或本地文件打开）', 4000);
+                return;
+            }
+            try {
+                await player.startStream(kind);
+                showHud();
+                showToast(kind === 'mic' ? 'MIC ON · 可在 PARAMS 调 INPUT GAIN' : 'SYSTEM AUDIO ON');
+            } catch (e) {
+                console.error(e);
+                if (e.message === 'NO_AUDIO_TRACK') showToast('没有拿到音频：共享时请勾选“共享音频”', 4000);
+                else if (e.name === 'NotAllowedError') showToast('权限被拒绝或已取消', 3000);
+                else showToast('无法开启输入：' + (e.name || e.message), 3000);
+            }
+        }
+
+        function selectSource(src) {
+            player.init();
+            if (src === 'file') fileInput.click();
+            else startLive(src);
+        }
+
+        $('start-btn').onclick = async () => {
+            $('start-btn').innerText = 'LOADING...';
+            player.init();
+            await loadDefault();
+            $('start-btn').innerText = 'INITIALIZE';
+        };
+        document.querySelectorAll('[data-src]').forEach(b => b.onclick = () => selectSource(b.dataset.src));
+        $('fallback-btn').onclick = () => { player.init(); fileInput.click(); };
+        playBtn.onclick = () => player.toggle();
+
+        // 拖放文件
+        let dragDepth = 0;
+        window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('drop-hint').classList.add('show'); });
+        window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop-hint').classList.remove('show'); } });
+        window.addEventListener('dragover', (e) => e.preventDefault());
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragDepth = 0;
+            $('drop-hint').classList.remove('show');
+            const f = e.dataTransfer.files[0];
+            if (!f) return;
+            player.init();
+            loadFile(f);
+        });
+        // 拖放不算用户激活，AudioContext 可能被挂起，任何一次点击/按键都尝试恢复
+        window.addEventListener('pointerdown', () => player.resume());
+        window.addEventListener('keydown', () => player.resume());
+
+        // --- 进度条：点击或拖动 ---
+        let scrubbing = false;
+        function progressPct(e) {
+            const rect = progressContainer.getBoundingClientRect();
+            return Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+        }
+        progressContainer.addEventListener('pointerdown', (e) => {
+            if (player.mode !== 'file') return;
+            scrubbing = true;
+            progressContainer.setPointerCapture(e.pointerId);
+            renderProgress(progressPct(e) * player.duration, player.duration);
+        });
+        progressContainer.addEventListener('pointermove', (e) => {
+            if (scrubbing) renderProgress(progressPct(e) * player.duration, player.duration);
+        });
+        progressContainer.addEventListener('pointerup', (e) => {
+            if (!scrubbing) return;
+            scrubbing = false;
+            player.seek(progressPct(e) * player.duration);
+        });
+        progressContainer.addEventListener('pointercancel', () => scrubbing = false);
 
         function fmtTime(t) {
-            const m = Math.floor(t/60); const s = Math.floor(t%60);
-            return `${m}:${s<10?'0':''}${s}`;
+            const m = Math.floor(t / 60), s = Math.floor(t % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+        let lastTimeText = '';
+        function renderProgress(curr, duration) {
+            if (!duration) return;
+            progressBar.style.transform = `scaleX(${curr / duration})`;
+            const txt = `${fmtTime(curr)} / ${fmtTime(duration)}`;
+            if (txt !== lastTimeText) { timeDisplay.innerText = txt; lastTimeText = txt; }
         }
 
-        function updateProgressUI(curr, duration) {
-            if(!duration) return;
-            progressBar.style.width = (curr / duration * 100) + '%';
-            timeDisplay.innerText = `${fmtTime(curr)} / ${fmtTime(duration)}`;
+        // --- 键盘 ---
+        window.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'SELECT') return;
+            const onRange = e.target.type === 'range';
+            switch (e.code) {
+                case 'Space': e.preventDefault(); player.toggle(); break;
+                case 'ArrowLeft': if (!onRange) setMode(pat.current - 1); break;
+                case 'ArrowRight': if (!onRange) setMode(pat.current + 1); break;
+                case 'KeyA': toggleAuto(); break;
+                case 'KeyP': toggleSettings(); break;
+                case 'KeyH': hud.classList.toggle('hidden'); break;
+                case 'KeyF':
+                    if (document.fullscreenElement) document.exitFullscreen();
+                    else document.documentElement.requestFullscreen?.();
+                    break;
+                default:
+                    if (/^Digit\d$/.test(e.code)) {
+                        const d = parseInt(e.code.slice(5));
+                        const idx = d === 0 ? 9 : d - 1;
+                        if (idx < PATTERNS.length) setMode(idx);
+                    }
+            }
+        });
+
+        // =====================================================================
+        // SPECTRUM EDITOR
+        // =====================================================================
+        const specCanvas = $('spectrum');
+        const sctx = specCanvas.getContext('2d');
+        const scopeCanvas = $('kick-scope');
+        const kctx = scopeCanvas.getContext('2d');
+        const LOG_RANGE = Math.log(F_MAX / F_MIN);
+        const fToX = (f, w) => Math.log(f / F_MIN) / LOG_RANGE * w;
+        const xToF = (x, w) => F_MIN * Math.exp(x / w * LOG_RANGE);
+
+        function fitCanvas(c) {
+            const r = c.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+            if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+            const ctx = c.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            return { w: r.width, h: r.height };
         }
+
+        function hexA(hex, a) {
+            const n = parseInt(hex.slice(1), 16);
+            return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+        }
+
+        function sampleDisp(f) {
+            const x = f / analysis.binHz;
+            const i = Math.floor(x);
+            if (i >= analysis.binCount - 1) return 0;
+            const t = x - i;
+            return analysis.disp[i] * (1 - t) + analysis.disp[i + 1] * t;
+        }
+
+        function drawSpectrum() {
+            const { w, h } = fitCanvas(specCanvas);
+            const ctx = sctx;
+            ctx.clearRect(0, 0, w, h);
+
+            ctx.font = '9px Courier New, monospace';
+            ctx.lineWidth = 1;
+            for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
+                const x = Math.round(fToX(f, w)) + 0.5;
+                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+                ctx.fillStyle = 'rgba(255,255,255,0.25)';
+                ctx.fillText(fmtHz(f), x + 2, h - 3);
+            }
+
+            if (analysis.disp) {
+                const grad = ctx.createLinearGradient(0, 0, 0, h);
+                grad.addColorStop(0, 'rgba(255,255,255,0.35)');
+                grad.addColorStop(1, 'rgba(255,255,255,0.03)');
+                ctx.beginPath();
+                ctx.moveTo(0, h);
+                for (let x = 0; x <= w; x += 2) ctx.lineTo(x, h - sampleDisp(xToF(x, w)) * h);
+                ctx.lineTo(w, h);
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.stroke();
+            }
+
+            const order = BAND_KEYS.filter(k => k !== activeBand).concat(activeBand);
+            for (const k of order) {
+                const b = cfg.bands[k], m = BAND_META[k], act = k === activeBand;
+                const x0 = fToX(b.lo, w), x1 = fToX(b.hi, w), yT = h - b.thr * h;
+                const lv = analysis.levels[k];
+                const flash = k === 'kick' ? analysis.kickEnv * 0.35 : 0;
+                ctx.fillStyle = hexA(m.color, (act ? 0.14 : 0.07) + flash);
+                ctx.fillRect(x0, 0, x1 - x0, h);
+
+                ctx.strokeStyle = hexA(m.color, act ? 0.9 : 0.4);
+                ctx.lineWidth = act ? 2 : 1;
+                ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, h); ctx.moveTo(x1, 0); ctx.lineTo(x1, h); ctx.stroke();
+
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath(); ctx.moveTo(x0, yT); ctx.lineTo(x1, yT); ctx.stroke();
+                ctx.setLineDash([]);
+
+                // 当前频段能量（实心横条）：高于虚线时变亮
+                const yL = h - lv * h;
+                ctx.fillStyle = hexA(m.color, lv > b.thr ? 1 : 0.45);
+                ctx.fillRect(x0 + 2, yL - 1.5, Math.max(2, x1 - x0 - 4), 3);
+
+                ctx.fillStyle = hexA(m.color, act ? 1 : 0.6);
+                ctx.fillText(m.label, x0 + 3, 10 + BAND_KEYS.indexOf(k) * 10);
+            }
+        }
+
+        function drawScope() {
+            const { w, h } = fitCanvas(scopeCanvas);
+            const ctx = kctx;
+            ctx.clearRect(0, 0, w, h);
+            const thr = cfg.bands.kick.thr;
+            const color = BAND_META.kick.color;
+            const step = w / (HIST_LEN - 1);
+
+            for (let i = 0; i < HIST_LEN; i++) {
+                const idx = (analysis.histIdx + i) % HIST_LEN;
+                if (analysis.histKick[idx]) {
+                    ctx.fillStyle = hexA(color, 0.35);
+                    ctx.fillRect(i * step - 1, 0, 2, h);
+                }
+            }
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < HIST_LEN; i++) {
+                const idx = (analysis.histIdx + i) % HIST_LEN;
+                const y = h - analysis.hist[idx] * h;
+                i ? ctx.lineTo(i * step, y) : ctx.moveTo(0, y);
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = color;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath(); ctx.moveTo(0, h - thr * h); ctx.lineTo(w, h - thr * h); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // --- 频谱交互 ---
+        let specDrag = null;
+        function localPos(e, c) {
+            const r = c.getBoundingClientRect();
+            return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height };
+        }
+        function hitTest(p, tol) {
+            const order = [activeBand, ...BAND_KEYS.filter(k => k !== activeBand)];
+            for (const k of order) {
+                const b = cfg.bands[k];
+                const x0 = fToX(b.lo, p.w), x1 = fToX(b.hi, p.w), yT = p.h - b.thr * p.h;
+                if (Math.abs(p.x - x0) <= tol) return { k, part: 'lo' };
+                if (Math.abs(p.x - x1) <= tol) return { k, part: 'hi' };
+                if (p.x > x0 && p.x < x1 && Math.abs(p.y - yT) <= tol) return { k, part: 'thr' };
+            }
+            for (const k of order) {
+                const b = cfg.bands[k];
+                if (p.x > fToX(b.lo, p.w) && p.x < fToX(b.hi, p.w)) return { k, part: 'move' };
+            }
+            return null;
+        }
+        const CURSORS = { lo: 'ew-resize', hi: 'ew-resize', thr: 'ns-resize', move: 'grab' };
+
+        specCanvas.addEventListener('pointerdown', (e) => {
+            const p = localPos(e, specCanvas);
+            const hit = hitTest(p, e.pointerType === 'touch' ? 14 : 6);
+            if (!hit) return;
+            const b = cfg.bands[hit.k];
+            activeBand = hit.k;
+            specDrag = { ...hit, f0: xToF(p.x, p.w), lo0: b.lo, hi0: b.hi };
+            specCanvas.setPointerCapture(e.pointerId);
+            specCanvas.style.cursor = hit.part === 'move' ? 'grabbing' : CURSORS[hit.part];
+            updateBandChips();
+            e.preventDefault();
+        });
+        specCanvas.addEventListener('pointermove', (e) => {
+            const p = localPos(e, specCanvas);
+            if (!specDrag) {
+                const hit = hitTest(p, e.pointerType === 'touch' ? 14 : 6);
+                specCanvas.style.cursor = hit ? CURSORS[hit.part] : 'default';
+                return;
+            }
+            const b = cfg.bands[specDrag.k];
+            const f = Math.min(F_MAX, Math.max(F_MIN, xToF(p.x, p.w)));
+            const MIN_RATIO = 1.15;
+            if (specDrag.part === 'lo') b.lo = Math.min(f, b.hi / MIN_RATIO);
+            else if (specDrag.part === 'hi') b.hi = Math.max(f, b.lo * MIN_RATIO);
+            else if (specDrag.part === 'thr') b.thr = Math.min(0.98, Math.max(0, 1 - p.y / p.h));
+            else {
+                let r = xToF(p.x, p.w) / specDrag.f0;
+                r = Math.max(r, F_MIN / specDrag.lo0);
+                r = Math.min(r, F_MAX / specDrag.hi0);
+                b.lo = specDrag.lo0 * r;
+                b.hi = specDrag.hi0 * r;
+            }
+            onBandsChanged();
+        });
+        const endSpecDrag = () => { if (specDrag) { specDrag = null; specCanvas.style.cursor = 'default'; } };
+        specCanvas.addEventListener('pointerup', endSpecDrag);
+        specCanvas.addEventListener('pointercancel', endSpecDrag);
+        specCanvas.addEventListener('dblclick', (e) => {
+            const hit = hitTest(localPos(e, specCanvas), 6);
+            if (!hit) return;
+            cfg.bands[hit.k] = { ...DEFAULT_BANDS[hit.k] };
+            onBandsChanged();
+        });
+
+        let scopeDrag = false;
+        function setThrFromScope(e) {
+            const p = localPos(e, scopeCanvas);
+            cfg.bands.kick.thr = Math.min(0.98, Math.max(0, 1 - p.y / p.h));
+            onBandsChanged();
+        }
+        scopeCanvas.addEventListener('pointerdown', (e) => { scopeDrag = true; scopeCanvas.setPointerCapture(e.pointerId); setThrFromScope(e); });
+        scopeCanvas.addEventListener('pointermove', (e) => { if (scopeDrag) setThrFromScope(e); });
+        scopeCanvas.addEventListener('pointerup', () => scopeDrag = false);
+        scopeCanvas.addEventListener('pointercancel', () => scopeDrag = false);
+
+        // =====================================================================
+        // LOOP
+        // =====================================================================
+        const clock = new THREE.Clock();
+        let currentIntensity = 1.0;
+        const bpmEl = $('bpm');
+        let lastBpmText = '';
+        const tmpColor = new THREE.Color();
 
         function animate() {
             requestAnimationFrame(animate);
-            const dt = clock.getDelta();
+            const dt = Math.min(clock.getDelta(), 0.1);
             const time = clock.elapsedTime;
+            const playing = player.playing;
+            const u = coreMat.uniforms;
+            const ease = (rate) => 1 - Math.exp(-dt * rate);
 
-            // Apply User Configs from UI each frame (or optimize to only on change)
-            bloom.strength = USER_CONFIG.glow;
-            coreMat.uniforms.uDistAmount.value = USER_CONFIG.distortion;
+            currentIntensity += ((playing ? 1.0 : 0.05) - currentIntensity) * ease(3);
+            u.uIntensity.value = currentIntensity;
+            u.uDistAmount.value = cfg.distortion;
+            pMat.opacity += ((playing ? 0.5 : 0.1) - pMat.opacity) * ease(3);
 
-            // Intensity Fade
-            const targetIntensity = isPlaying ? 1.0 : 0.05;
-            currentIntensity = THREE.MathUtils.lerp(currentIntensity, targetIntensity, 0.05);
-            coreMat.uniforms.uIntensity.value = currentIntensity;
-            pMat.opacity = THREE.MathUtils.lerp(pMat.opacity, isPlaying ? 0.5 : 0.1, 0.05);
+            if (analysis.analyser && playing) {
+                analysis.update(dt, time);
 
-            if (analyser && isPlaying) {
-                const data = analyser.getFrequencyData();
-                
-                // --- BASS / HIGH LOGIC ---
-                const kickThreshold = 0.55;    // require stronger low-end to trigger
-                const kickRiseFactor = 1.35;   // needs to beat recent average
-                const highGate = 0.35;         // gate highs harder to avoid constant flicker
-                const highExpand = 1.7;        // expand after gate for punch
+                const finalBass = analysis.gated('bass') * cfg.bassGain;
+                const finalHigh = analysis.gated('high') * cfg.highGain;
+                const smooth = (cur, target) => cur + (target - cur) * ease(target > cur ? cfg.attack : cfg.release);
+                u.uBass.value = smooth(u.uBass.value, finalBass);
+                u.uHigh.value = smooth(u.uHigh.value, finalHigh);
 
-                let lowSum = 0;
-                for(let i=1; i<6; i++) lowSum += data[i];
-                const lowLevel = lowSum / (5 * 255);
-                
-                // Kick Detect
-                if (lowLevel > kickThreshold && lowLevel > lastLowAvg * kickRiseFactor) kickImpulse = 1.0;
-                lastLowAvg = lowLevel * 0.1 + lastLowAvg * 0.9; 
-                kickImpulse = THREE.MathUtils.lerp(kickImpulse, 0, 0.07); // slower decay for deeper hits
-                
-                // --- HIGH LOGIC (Gated) ---
-                let highSum = 0;
-                // Focus closer to snare/hats frequency
-                for(let i=80; i<150; i++) highSum += data[i];
-                let highLevel = highSum / (70 * 255);
-
-                // Smart Gate: Kill low volume high-freq noise
-                if (highLevel < highGate) highLevel = 0.0;
-                else highLevel = (highLevel - highGate) * highExpand; // Expand range
-
-                // Apply Manual Gains
-                const finalBass = lowLevel * USER_CONFIG.bassGain;
-                const finalHigh = highLevel * USER_CONFIG.highGain;
-
-                const attackRate = USER_CONFIG.attack;
-                const releaseRate = USER_CONFIG.release;
-                const smoothAudio = (current, target) => {
-                    const rate = target > current ? attackRate : releaseRate;
-                    const k = 1 - Math.exp(-dt * rate);
-                    return THREE.MathUtils.lerp(current, target, k);
-                };
-
-                coreMat.uniforms.uBass.value = smoothAudio(coreMat.uniforms.uBass.value, finalBass);
-                coreMat.uniforms.uKick.value = kickImpulse; 
-                coreMat.uniforms.uHigh.value = smoothAudio(coreMat.uniforms.uHigh.value, finalHigh);
-
-                // Particles
-                const pScale = 1.0 + kickImpulse * 0.8 + finalBass * 0.3;
-                particles.scale.setScalar(pScale);
-                
-                // Progress
-                const duration = sound.buffer.duration;
-                const elapsed = (sound.context.currentTime - progressStart) * sound.playbackRate;
-                const curr = (progressOffset + Math.max(0, elapsed)) % duration;
-                updateProgressUI(curr, duration);
-
+                if (player.mode === 'file' && !scrubbing) renderProgress(player.currentTime, player.duration);
             } else {
-                 coreMat.uniforms.uBass.value = THREE.MathUtils.lerp(coreMat.uniforms.uBass.value, 0.0, 0.05);
-                 coreMat.uniforms.uKick.value = 0;
-                 coreMat.uniforms.uHigh.value = 0;
-                 
-                 // Keep UI steady while paused
-                 if (sound && sound.buffer) {
-                    updateProgressUI(progressOffset % sound.buffer.duration, sound.buffer.duration);
-                 }
+                analysis.idle(dt);
+                u.uBass.value *= Math.exp(-dt * 3);
+                u.uHigh.value *= Math.exp(-dt * 6);
+                if (player.mode === 'file' && !scrubbing) renderProgress(player.currentTime, player.duration);
             }
 
-            const c = patternColors[patternIndex];
-            coreMat.uniforms.uColorA.value.lerp(new THREE.Color(c.a), 0.05);
-            coreMat.uniforms.uColorB.value.lerp(new THREE.Color(c.b), 0.05);
-            coreMat.uniforms.uPattern.value = THREE.MathUtils.lerp(coreMat.uniforms.uPattern.value, patternIndex, 0.05);
-            coreMat.uniforms.uTime.value = time;
-            
-            const rotSpeed = isPlaying ? 0.002 + kickImpulse * 0.02 : 0.0005;
-            core.rotation.y += rotSpeed;
-            particles.rotation.y += isPlaying ? 0.001 : 0.0002;
+            const kick = analysis.kickEnv * cfg.kickPower;
+            u.uKick.value = kick;
+            u.uKickAge.value = Math.min(10, time - analysis.lastKickT);
+            u.uSeed.value += (seedTarget - u.uSeed.value) * ease(3);
+
+            // Pattern 交叉淡化
+            if (pat.a !== pat.b) {
+                pat.mix += dt / 0.8;
+                if (pat.mix >= 1) { pat.a = pat.b; pat.mix = 0; }
+            }
+            u.uPatA.value = pat.a;
+            u.uPatB.value = pat.b;
+            u.uMix.value = THREE.MathUtils.smoothstep(pat.mix, 0, 1);
+
+            if (cfg.autoCycle && playing && time - pat.lastSwitchT > 45) randomNextPattern(); // 没有鼓点时的兜底
+
+            const P = PATTERNS[pat.current];
+            const ck = ease(3);
+            u.uColorA.value.lerp(P.ca, ck);
+            u.uColorB.value.lerp(P.cb, ck);
+            u.uTime.value = time;
+
+            // 粒子、冲击波、相机、后期
+            pMat.color.lerp(tmpColor.copy(P.cb).multiplyScalar(0.35), ck);
+            particles.scale.setScalar(1.0 + kick * 0.8 + u.uBass.value * 0.3);
+            particles.rotation.y += dt * (playing ? 0.06 : 0.012);
+            core.rotation.y += dt * (playing ? 0.12 + kick * 1.2 : 0.03);
+
+            for (const r of rings) {
+                if (!r.visible) continue;
+                r.userData.age += dt;
+                const t = r.userData.age / RING_LIFE;
+                if (t >= 1) { r.visible = false; continue; }
+                r.scale.setScalar(2.3 + t * 6.0);
+                r.material.opacity = (1 - t) * (1 - t) * 0.7 * Math.min(1, cfg.kickPower);
+                r.material.color.copy(u.uColorB.value);
+                r.quaternion.copy(camera.quaternion);
+            }
+
+            camera.fov = BASE_FOV - kick * 4;
+            camera.updateProjectionMatrix();
+            bloom.strength = cfg.glow * (1 + kick * 0.4);
+            rgb.uniforms['amount'].value = 0.0015 + kick * 0.004 + u.uHigh.value * 0.002;
+
+            kickLed.style.opacity = 0.1 + analysis.kickEnv * 0.9;
+            if (settingsPanel.classList.contains('open') && hud.classList.contains('active')) {
+                drawSpectrum();
+                drawScope();
+                const txt = analysis.bpm ? `≈${Math.round(analysis.bpm)} BPM` : '--- BPM';
+                if (txt !== lastBpmText) { bpmEl.innerText = txt; lastBpmText = txt; }
+            }
 
             controls.update();
             composer.render();
         }
 
-        window.onresize = () => {
+        window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
             composer.setSize(window.innerWidth, window.innerHeight);
-        };
+        });
 
+        // =====================================================================
+        // BOOT
+        // =====================================================================
+        loadSettings();
+        setMode(cfg.pattern, true);
+        updateUIValues();
+        applyQuality();
         animate();
     </script>
 </body>
