@@ -217,7 +217,7 @@
                     <button class="action-btn" id="reset-btn">RESET DEFAULT</button>
                     <button class="action-btn" id="save-btn">SAVE CONFIG</button>
                 </div>
-                <div class="keys-hint">参数修改会自动保存 · SPACE 播放/暂停 · ←/→ 切 pattern · 1-9,0 直选 · A 自动切换 · P 参数面板 · H 隐藏界面 · F 全屏</div>
+                <div class="keys-hint">参数修改会自动保存 · SPACE 播放/暂停 · ←/→ 切 pattern · 1-9,0 直选 · A 自动切换 · P 参数面板 · H 隐藏界面 · F 全屏 · 滚轮/双指/+- 放大进入球内 · 双击画面 进出球心 · Z 复位视角</div>
             </div>
         </div>
     </div>
@@ -681,6 +681,44 @@
         controls.enableDamping = true;
         controls.autoRotate = true;
         controls.autoRotateSpeed = 0.5;
+        // 缩放由下方 zoom 逻辑接管：滚轮/双指只往里推，最远就是初始距离；关闭平移保证始终围绕球心
+        controls.enableZoom = false;
+        controls.enablePan = false;
+
+        // --- ZOOM：0 = 初始视角，1 = 球体内部 ---
+        const ZOOM_FAR = 7.5, ZOOM_NEAR = 0.35;
+        const zoom = { target: 0, current: 0, inside: 0, fill: 0 };
+        const zoomToDist = (z) => ZOOM_FAR * Math.pow(ZOOM_NEAR / ZOOM_FAR, z);
+        function nudgeZoom(delta) { zoom.target = Math.min(1, Math.max(0, zoom.target + delta)); }
+
+        renderer.domElement.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 800 : e.deltaY;
+            nudgeZoom(-px * 0.0012);
+        }, { passive: false });
+        renderer.domElement.addEventListener('dblclick', () => { zoom.target = zoom.target > 0.5 ? 0 : 1; });
+
+        // 双指捏合
+        const touches = new Map();
+        let pinchDist = 0;
+        const touchSpan = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            if (e.pointerType !== 'touch') return;
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (touches.size === 2) pinchDist = touchSpan();
+        });
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (!touches.has(e.pointerId)) return;
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (touches.size === 2) {
+                const d = touchSpan();
+                if (pinchDist > 0 && d > 0) nudgeZoom(Math.log(d / pinchDist) * 0.6);
+                pinchDist = d;
+            }
+        });
+        const dropTouch = (e) => { touches.delete(e.pointerId); pinchDist = 0; };
+        renderer.domElement.addEventListener('pointerup', dropTouch);
+        renderer.domElement.addEventListener('pointercancel', dropTouch);
 
         const specTex = new THREE.DataTexture(new Uint8Array(SPEC_TEX_SIZE), SPEC_TEX_SIZE, 1, THREE.RedFormat, THREE.UnsignedByteType);
         specTex.magFilter = THREE.LinearFilter;
@@ -834,7 +872,9 @@
                 if (uHigh > 0.002) jitter = snoise(position * 25.0 + uTime * 20.0) * uHigh * uIntensity * 0.2;
 
                 vDisp = d + boom;
-                vec4 mv = modelViewMatrix * vec4(position + n * (d + boom + jitter), 1.0);
+                // 向内的形变最多到半径 0.6，镜头进入球内时不会被穿过球心的面糊脸（外部看被内球挡住，无变化）
+                float total = max(d + boom + jitter, -1.4);
+                vec4 mv = modelViewMatrix * vec4(position + n * total, 1.0);
                 vViewPos = mv.xyz;
                 gl_Position = projectionMatrix * mv;
             }
@@ -845,6 +885,7 @@
             uniform float uHigh;
             uniform float uKick;
             uniform float uIntensity;
+            uniform float uInside;
             uniform vec3 uColorA;
             uniform vec3 uColorB;
 
@@ -871,7 +912,8 @@
                 float grid = abs(sin(vObjNorm.x * 60.0) * sin(vObjNorm.y * 60.0));
                 color += vec3(grid) * smoothstep(0.2, 1.0, high) * 1.5 * uIntensity;
 
-                color += vec3(1.0) * uKick * uIntensity * 0.7;
+                // 在球内时整个画面都是球面，全屏白闪太刺眼，减弱一些
+                color += vec3(1.0) * uKick * uIntensity * 0.7 * (1.0 - 0.6 * uInside);
 
                 gl_FragColor = vec4(color, 1.0);
             }
@@ -881,6 +923,7 @@
         const coreMat = new THREE.ShaderMaterial({
             vertexShader,
             fragmentShader,
+            side: THREE.DoubleSide,   // 进入球内时能看到内壁
             uniforms: {
                 uTime: { value: 0 },
                 uBass: { value: 0 },
@@ -894,6 +937,7 @@
                 uKickAge: { value: 10 },
                 uSeed: { value: 0 },
                 uSeedStep: { value: 0 },
+                uInside: { value: 0 },
                 uSpec: { value: specTex },
                 uColorA: { value: startPattern.ca.clone() },
                 uColorB: { value: startPattern.cb.clone() },
@@ -1289,6 +1333,9 @@
                 case 'KeyA': toggleAuto(); break;
                 case 'KeyP': toggleSettings(); break;
                 case 'KeyH': hud.classList.toggle('hidden'); break;
+                case 'Equal': case 'NumpadAdd': nudgeZoom(0.1); break;
+                case 'Minus': case 'NumpadSubtract': nudgeZoom(-0.1); break;
+                case 'KeyZ': zoom.target = 0; break;
                 case 'KeyF':
                     if (document.fullscreenElement) document.exitFullscreen();
                     else document.documentElement.requestFullscreen?.();
@@ -1580,9 +1627,19 @@
                 r.quaternion.copy(camera.quaternion);
             }
 
-            camera.fov = BASE_FOV - kick * 4;
+            // 缩放：对数插值距离，越靠近球心越慢，进入球内后隐藏内部黑球
+            zoom.current += (zoom.target - zoom.current) * ease(6);
+            const dist = zoomToDist(zoom.current);
+            camera.position.setLength(dist);
+            zoom.inside = THREE.MathUtils.smoothstep(2.8 - dist, 0, 1.2);
+            zoom.fill = THREE.MathUtils.smoothstep(5.5 - dist, 0, 3.0);   // 球开始占满屏幕的程度
+            u.uInside.value = zoom.fill;
+            inner.visible = zoom.inside < 0.99;
+            inner.scale.setScalar(Math.max(0.01, 1 - zoom.inside));
+
+            camera.fov = BASE_FOV - kick * 4 * (1 - 0.5 * zoom.fill);
             camera.updateProjectionMatrix();
-            bloom.strength = cfg.glow * (1 + kick * 0.4);
+            bloom.strength = cfg.glow * (1 + kick * 0.4) * (1 - 0.4 * zoom.fill);
             rgb.uniforms['amount'].value = 0.0015 + kick * 0.004 + u.uHigh.value * 0.002;
 
             kickLed.style.opacity = 0.1 + analysis.kickEnv * 0.9;
