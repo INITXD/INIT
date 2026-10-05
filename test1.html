@@ -217,7 +217,7 @@
                     <button class="action-btn" id="reset-btn">RESET DEFAULT</button>
                     <button class="action-btn" id="save-btn">SAVE CONFIG</button>
                 </div>
-                <div class="keys-hint">参数修改会自动保存 · SPACE 播放/暂停 · ←/→ 切 pattern · 1-9,0 直选 · A 自动切换 · P 参数面板 · H 隐藏界面 · F 全屏 · 滚轮/双指/+- 放大进入球内 · 双击画面 进出球心 · Z 复位视角</div>
+                <div class="keys-hint">参数修改会自动保存 · SPACE 播放/暂停 · ←/→ 切 pattern · 1-9,0 直选 · A 自动切换 · P 参数面板 · H 隐藏界面 · F 全屏 · 滚轮/双指/+- 展开球面铺满屏幕 · 双击画面 展开/收回 · Z 收回球体</div>
             </div>
         </div>
     </div>
@@ -681,14 +681,14 @@
         controls.enableDamping = true;
         controls.autoRotate = true;
         controls.autoRotateSpeed = 0.5;
-        // 缩放由下方 zoom 逻辑接管：滚轮/双指只往里推，最远就是初始距离；关闭平移保证始终围绕球心
+        // 滚轮/双指不再推镜头，而是控制“展开”程度；关闭平移保证始终围绕球心
         controls.enableZoom = false;
         controls.enablePan = false;
 
-        // --- ZOOM：0 = 初始视角，1 = 球体内部 ---
-        const ZOOM_FAR = 7.5, ZOOM_NEAR = 0.35;
-        const zoom = { target: 0, current: 0, inside: 0, fill: 0 };
-        const zoomToDist = (z) => ZOOM_FAR * Math.pow(ZOOM_NEAR / ZOOM_FAR, z);
+        // --- UNWRAP：0 = 球体，1 = 球面按等距柱状投影铺满屏幕 ---
+        // 经纬度相对“当前视线方向”计算：球正对镜头的一面展开到屏幕中央，背面的接缝落在屏幕左右边缘，
+        // 因此拖动旋转 / 自动旋转在展开状态下表现为地图横向滚动
+        const zoom = { target: 0, current: 0 };
         function nudgeZoom(delta) { zoom.target = Math.min(1, Math.max(0, zoom.target + delta)); }
 
         renderer.domElement.addEventListener('wheel', (e) => {
@@ -741,10 +741,17 @@
             uniform float uSeed;
             uniform float uSeedStep;
             uniform sampler2D uSpec;
+            uniform float uUnwrap;
+            uniform float uCamDist;
+            uniform vec2 uHalfSize;   // 距离 uCamDist 处屏幕的半宽/半高（含少量溢出）
 
             varying vec3 vViewPos;
             varying vec3 vObjNorm;
             varying float vDisp;
+            varying float vLonX;
+            varying vec2 vLonDir;
+
+            #define PI 3.14159265359
 
             vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
             vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -871,10 +878,24 @@
                 float jitter = 0.0;
                 if (uHigh > 0.002) jitter = snoise(position * 25.0 + uTime * 20.0) * uHigh * uIntensity * 0.2;
 
-                vDisp = d + boom;
+                // 向内的形变最多到半径 0.6，避免穿过球心翻面（外部看被内球挡住，无变化；展开时也限制了起伏深度）
                 // 向内的形变最多到半径 0.6，镜头进入球内时不会被穿过球心的面糊脸（外部看被内球挡住，无变化）
                 float total = max(d + boom + jitter, -1.4);
                 vec4 mv = modelViewMatrix * vec4(position + n * total, 1.0);
+
+                // 相对视线的经纬度（正对镜头处 lon = 0）
+                vec3 nv = normalize(mat3(modelViewMatrix) * n);
+                float lon = atan(nv.x, nv.z);
+                float lat = asin(clamp(nv.y, -1.0, 1.0));
+                vLonX = lon / PI;
+                vLonDir = nv.xz;
+
+                if (uUnwrap > 0.0) {
+                    // 起伏变成朝向镜头的深度；xy 按深度做透视补偿，保证投影后严格铺满屏幕
+                    float depth = uCamDist - clamp(total, -1.4, 4.0) * 0.6;
+                    vec2 xy = vec2(lon / PI, lat / (0.5 * PI)) * uHalfSize * (depth / uCamDist);
+                    mv.xyz = mix(mv.xyz, vec3(xy, -depth), uUnwrap);
+                }
                 vViewPos = mv.xyz;
                 gl_Position = projectionMatrix * mv;
             }
@@ -885,15 +906,22 @@
             uniform float uHigh;
             uniform float uKick;
             uniform float uIntensity;
-            uniform float uInside;
+            uniform float uFill;
+            uniform float uUnwrap;
             uniform vec3 uColorA;
             uniform vec3 uColorB;
 
             varying vec3 vViewPos;
             varying vec3 vObjNorm;
             varying float vDisp;
+            varying float vLonX;
+            varying vec2 vLonDir;
 
             void main() {
+                // 跨越经度接缝（或极点）的三角形展开后会横跨整个屏幕：
+                // 线性插值的经度与由插值方向重建的经度对不上，就丢弃。它们只位于屏幕边缘的溢出区域。
+                if (uUnwrap > 0.02 && abs(atan(vLonDir.x, vLonDir.y) / 3.14159265359 - vLonX) > 0.03) discard;
+
                 // 由屏幕空间导数得到形变后的真实法线，菲涅尔/明暗随视角正确变化
                 vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
                 vec3 v = normalize(-vViewPos);
@@ -913,7 +941,7 @@
                 color += vec3(grid) * smoothstep(0.2, 1.0, high) * 1.5 * uIntensity;
 
                 // 在球内时整个画面都是球面，全屏白闪太刺眼，减弱一些
-                color += vec3(1.0) * uKick * uIntensity * 0.7 * (1.0 - 0.6 * uInside);
+                color += vec3(1.0) * uKick * uIntensity * 0.7 * (1.0 - 0.6 * uFill);
 
                 gl_FragColor = vec4(color, 1.0);
             }
@@ -937,7 +965,10 @@
                 uKickAge: { value: 10 },
                 uSeed: { value: 0 },
                 uSeedStep: { value: 0 },
-                uInside: { value: 0 },
+                uFill: { value: 0 },
+                uUnwrap: { value: 0 },
+                uCamDist: { value: 7.5 },
+                uHalfSize: { value: new THREE.Vector2(1, 1) },
                 uSpec: { value: specTex },
                 uColorA: { value: startPattern.ca.clone() },
                 uColorB: { value: startPattern.cb.clone() },
@@ -1622,24 +1653,28 @@
                 const t = r.userData.age / RING_LIFE;
                 if (t >= 1) { r.visible = false; continue; }
                 r.scale.setScalar(2.3 + t * 6.0);
-                r.material.opacity = (1 - t) * (1 - t) * 0.7 * Math.min(1, cfg.kickPower);
+                r.material.opacity = (1 - t) * (1 - t) * 0.7 * Math.min(1, cfg.kickPower) * (1 - zoom.current);
                 r.material.color.copy(u.uColorB.value);
                 r.quaternion.copy(camera.quaternion);
             }
 
             // 缩放：对数插值距离，越靠近球心越慢，进入球内后隐藏内部黑球
-            zoom.current += (zoom.target - zoom.current) * ease(6);
-            const dist = zoomToDist(zoom.current);
-            camera.position.setLength(dist);
-            zoom.inside = THREE.MathUtils.smoothstep(2.8 - dist, 0, 1.2);
-            zoom.fill = THREE.MathUtils.smoothstep(5.5 - dist, 0, 3.0);   // 球开始占满屏幕的程度
-            u.uInside.value = zoom.fill;
-            inner.visible = zoom.inside < 0.99;
-            inner.scale.setScalar(Math.max(0.01, 1 - zoom.inside));
+            // 展开：缓动后的进度驱动顶点从球面插值到屏幕平面；内部黑球与冲击波环随之淡出
+            zoom.current += (zoom.target - zoom.current) * ease(5);
+            if (Math.abs(zoom.target - zoom.current) < 1e-4) zoom.current = zoom.target;
+            const unwrap = THREE.MathUtils.smootherstep(zoom.current, 0, 1);
+            const camDist = camera.position.length();
+            const halfH = camDist * Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) * 1.04;
+            u.uUnwrap.value = unwrap;
+            u.uCamDist.value = camDist;
+            u.uHalfSize.value.set(halfH * camera.aspect, halfH);
+            u.uFill.value = unwrap;
+            inner.visible = unwrap < 0.99;
+            inner.scale.setScalar(Math.max(0.01, 1 - unwrap));
 
-            camera.fov = BASE_FOV - kick * 4 * (1 - 0.5 * zoom.fill);
+            camera.fov = BASE_FOV - kick * 4 * (1 - 0.5 * unwrap);
             camera.updateProjectionMatrix();
-            bloom.strength = cfg.glow * (1 + kick * 0.4) * (1 - 0.4 * zoom.fill);
+            bloom.strength = cfg.glow * (1 + kick * 0.4) * (1 - 0.4 * unwrap);
             rgb.uniforms['amount'].value = 0.0015 + kick * 0.004 + u.uHigh.value * 0.002;
 
             kickLed.style.opacity = 0.1 + analysis.kickEnv * 0.9;
